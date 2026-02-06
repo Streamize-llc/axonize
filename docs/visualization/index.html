@@ -1,0 +1,1735 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Axonize Architecture Visualization</title>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border-color: #30363d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-yellow: #d29922;
+            --accent-red: #f85149;
+            --accent-purple: #a371f7;
+            --accent-cyan: #39c5cf;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .header .subtitle {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        /* Navigation */
+        .nav {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            gap: 4px;
+            padding: 0 24px;
+            overflow-x: auto;
+        }
+
+        .nav-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            padding: 12px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            border-bottom: 2px solid transparent;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .nav-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .nav-btn.active {
+            color: var(--accent-blue);
+            border-bottom-color: var(--accent-blue);
+        }
+
+        /* Main Content */
+        .main {
+            padding: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        .section-title {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .section-desc {
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Buttons */
+        .btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: var(--border-color);
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+        }
+
+        .btn-primary:hover {
+            background: #4c9aed;
+        }
+
+        /* Tags */
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .tag-blue { background: rgba(88, 166, 255, 0.2); color: var(--accent-blue); }
+        .tag-green { background: rgba(63, 185, 80, 0.2); color: var(--accent-green); }
+        .tag-yellow { background: rgba(210, 153, 34, 0.2); color: var(--accent-yellow); }
+        .tag-red { background: rgba(248, 81, 73, 0.2); color: var(--accent-red); }
+        .tag-purple { background: rgba(163, 113, 247, 0.2); color: var(--accent-purple); }
+
+        /* ================================================
+           SECTION 1: Data Flow
+           ================================================ */
+        .flow-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 40px 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .flow-node {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            z-index: 2;
+        }
+
+        .flow-box {
+            width: 100px;
+            height: 80px;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .flow-box:hover {
+            border-color: var(--accent-blue);
+            transform: translateY(-2px);
+        }
+
+        .flow-box.active {
+            border-color: var(--accent-green);
+            box-shadow: 0 0 20px rgba(63, 185, 80, 0.3);
+        }
+
+        .flow-box-icon {
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+
+        .flow-box-label {
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .flow-arrow {
+            width: 60px;
+            height: 2px;
+            background: var(--border-color);
+            position: relative;
+        }
+
+        .flow-arrow::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: -4px;
+            border: 5px solid transparent;
+            border-left-color: var(--border-color);
+        }
+
+        .flow-packet {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: var(--accent-blue);
+            border-radius: 50%;
+            opacity: 0;
+            z-index: 3;
+        }
+
+        .flow-packet.animate {
+            animation: flowMove 3s ease-in-out forwards;
+        }
+
+        @keyframes flowMove {
+            0% { left: 10%; opacity: 1; }
+            20% { left: 25%; }
+            40% { left: 45%; }
+            60% { left: 65%; }
+            80% { left: 85%; }
+            100% { left: 95%; opacity: 0; }
+        }
+
+        .flow-details {
+            margin-top: 20px;
+            padding: 16px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            min-height: 100px;
+        }
+
+        /* ================================================
+           SECTION 2: GPU 3-Layer Model
+           ================================================ */
+        .gpu-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .gpu-tab {
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+
+        .gpu-tab:hover {
+            color: var(--text-primary);
+        }
+
+        .gpu-tab.active {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: white;
+        }
+
+        .gpu-diagram {
+            display: none;
+            padding: 20px;
+        }
+
+        .gpu-diagram.active {
+            display: block;
+        }
+
+        .gpu-layer {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .gpu-layer-label {
+            width: 120px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .gpu-layer-content {
+            flex: 1;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .gpu-box {
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            min-width: 150px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .gpu-box:hover {
+            border-color: var(--accent-blue);
+        }
+
+        .gpu-box-title {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .gpu-box-subtitle {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .gpu-box.physical { border-color: var(--accent-purple); }
+        .gpu-box.resource { border-color: var(--accent-blue); }
+        .gpu-box.context { border-color: var(--accent-green); }
+
+        .gpu-arrow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 0;
+        }
+
+        .gpu-arrow svg {
+            width: 24px;
+            height: 24px;
+            fill: var(--text-secondary);
+        }
+
+        .gpu-info-panel {
+            margin-top: 20px;
+            padding: 16px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        /* ================================================
+           SECTION 3: Trace/Span Timeline
+           ================================================ */
+        .timeline-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .timeline-container {
+            position: relative;
+            padding: 20px 0;
+        }
+
+        .timeline-ruler {
+            display: flex;
+            justify-content: space-between;
+            padding: 0 80px;
+            margin-bottom: 10px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .timeline-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            height: 32px;
+        }
+
+        .timeline-label {
+            width: 80px;
+            font-size: 13px;
+            font-weight: 500;
+            padding-right: 10px;
+            text-align: right;
+        }
+
+        .timeline-bar-container {
+            flex: 1;
+            height: 24px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .timeline-bar {
+            position: absolute;
+            height: 100%;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            padding: 0 8px;
+            font-size: 11px;
+            color: white;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        .timeline-bar:hover {
+            filter: brightness(1.2);
+            z-index: 10;
+        }
+
+        .timeline-bar.root { background: var(--accent-purple); }
+        .timeline-bar.vit { background: var(--accent-blue); }
+        .timeline-bar.diffusion { background: var(--accent-green); }
+        .timeline-bar.step { background: var(--accent-cyan); }
+        .timeline-bar.vae { background: var(--accent-yellow); }
+
+        .timeline-gpu-row {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .timeline-tooltip {
+            position: fixed;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            z-index: 100;
+            display: none;
+            min-width: 200px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .timeline-tooltip.show {
+            display: block;
+        }
+
+        /* ================================================
+           SECTION 4: SDK Internals
+           ================================================ */
+        .sdk-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .sdk-thread {
+            padding: 20px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+        }
+
+        .sdk-thread-title {
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .ring-buffer {
+            display: flex;
+            gap: 4px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .ring-slot {
+            width: 24px;
+            height: 24px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .ring-slot.filled {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+        }
+
+        .ring-slot.sending {
+            background: var(--accent-green);
+            border-color: var(--accent-green);
+            animation: pulse 0.5s ease-in-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+
+        .sdk-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .sdk-metric {
+            padding: 12px;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+        }
+
+        .sdk-metric-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .sdk-metric-value {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .sdk-controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 20px;
+        }
+
+        /* ================================================
+           SECTION 5: Edge Cases
+           ================================================ */
+        .edge-case-selector {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .edge-case-btn {
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+
+        .edge-case-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .edge-case-btn.active {
+            background: var(--accent-purple);
+            border-color: var(--accent-purple);
+            color: white;
+        }
+
+        .edge-simulation {
+            padding: 20px;
+        }
+
+        .edge-step {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .edge-step:last-child {
+            border-bottom: none;
+        }
+
+        .edge-step-num {
+            width: 32px;
+            height: 32px;
+            background: var(--bg-tertiary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .edge-step-num.success { background: var(--accent-green); }
+        .edge-step-num.warning { background: var(--accent-yellow); }
+        .edge-step-num.error { background: var(--accent-red); }
+
+        .edge-step-content {
+            flex: 1;
+        }
+
+        .edge-step-title {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .edge-step-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .edge-step-status {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        /* ================================================
+           SECTION 6: Query Simulation
+           ================================================ */
+        .query-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .query-input {
+            width: 100%;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 12px;
+            color: var(--text-primary);
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+            resize: vertical;
+            min-height: 150px;
+        }
+
+        .query-input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        .query-flow {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .query-flow-step {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            opacity: 0.5;
+            transition: all 0.3s;
+        }
+
+        .query-flow-step.active {
+            opacity: 1;
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .query-flow-step.done {
+            opacity: 1;
+            border-left: 3px solid var(--accent-green);
+        }
+
+        .query-result {
+            margin-top: 20px;
+            padding: 16px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+        }
+
+        .query-result-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+        }
+
+        .query-result-table th,
+        .query-result-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .query-result-table th {
+            background: var(--bg-secondary);
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sdk-container,
+            .query-container {
+                grid-template-columns: 1fr;
+            }
+
+            .flow-container {
+                flex-wrap: wrap;
+                gap: 20px;
+            }
+
+            .flow-arrow {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <h1>Axonize Architecture</h1>
+        <span class="subtitle">Interactive Visualization</span>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <button class="nav-btn active" data-section="dataflow">1. Data Flow</button>
+        <button class="nav-btn" data-section="gpu">2. GPU 3-Layer</button>
+        <button class="nav-btn" data-section="trace">3. Trace/Span</button>
+        <button class="nav-btn" data-section="sdk">4. SDK Internals</button>
+        <button class="nav-btn" data-section="edge">5. Edge Cases</button>
+        <button class="nav-btn" data-section="query">6. Query Flow</button>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Section 1: Data Flow -->
+        <section id="dataflow" class="section active">
+            <h2 class="section-title">Data Flow</h2>
+            <p class="section-desc">추론 요청이 시스템을 통과하는 전체 흐름</p>
+
+            <div class="card">
+                <div class="card-title">
+                    <span>End-to-End Flow</span>
+                    <button class="btn btn-primary" onclick="playDataFlow()">Play Animation</button>
+                </div>
+
+                <div class="flow-container" id="flowContainer">
+                    <div class="flow-node">
+                        <div class="flow-box" data-step="request">
+                            <div class="flow-box-icon">📥</div>
+                            <div class="flow-box-label">Request</div>
+                        </div>
+                        <span class="tag tag-blue">Client</span>
+                    </div>
+
+                    <div class="flow-arrow"></div>
+
+                    <div class="flow-node">
+                        <div class="flow-box" data-step="sdk">
+                            <div class="flow-box-icon">📦</div>
+                            <div class="flow-box-label">SDK</div>
+                        </div>
+                        <span class="tag tag-green">&lt; 1μs</span>
+                    </div>
+
+                    <div class="flow-arrow"></div>
+
+                    <div class="flow-node">
+                        <div class="flow-box" data-step="buffer">
+                            <div class="flow-box-icon">🔄</div>
+                            <div class="flow-box-label">Buffer</div>
+                        </div>
+                        <span class="tag tag-yellow">Ring Buffer</span>
+                    </div>
+
+                    <div class="flow-arrow"></div>
+
+                    <div class="flow-node">
+                        <div class="flow-box" data-step="server">
+                            <div class="flow-box-icon">🖥️</div>
+                            <div class="flow-box-label">Server</div>
+                        </div>
+                        <span class="tag tag-purple">OTLP/gRPC</span>
+                    </div>
+
+                    <div class="flow-arrow"></div>
+
+                    <div class="flow-node">
+                        <div class="flow-box" data-step="db">
+                            <div class="flow-box-icon">💾</div>
+                            <div class="flow-box-label">ClickHouse</div>
+                        </div>
+                        <span class="tag tag-blue">Storage</span>
+                    </div>
+
+                    <div class="flow-packet" id="flowPacket"></div>
+                </div>
+
+                <div class="flow-details" id="flowDetails">
+                    <strong>클릭하여 상세 정보 확인</strong>
+                    <p style="color: var(--text-secondary); margin-top: 8px;">각 컴포넌트를 클릭하면 상세 설명이 표시됩니다.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: GPU 3-Layer Model -->
+        <section id="gpu" class="section">
+            <h2 class="section-title">GPU 3-Layer Identity Model</h2>
+            <p class="section-desc">Physical → Resource → Context 계층으로 GPU를 정확히 식별</p>
+
+            <div class="card">
+                <div class="gpu-tabs">
+                    <button class="gpu-tab active" data-case="full">Case A: Full GPU</button>
+                    <button class="gpu-tab" data-case="mig">Case B: MIG</button>
+                    <button class="gpu-tab" data-case="timeslice">Case C: Time-slicing</button>
+                </div>
+
+                <!-- Full GPU Case -->
+                <div class="gpu-diagram active" id="gpu-full">
+                    <div class="gpu-layer">
+                        <div class="gpu-layer-label">
+                            <span class="tag tag-purple">Physical</span>
+                        </div>
+                        <div class="gpu-layer-content">
+                            <div class="gpu-box physical" onclick="showGpuInfo('physical-full')">
+                                <div class="gpu-box-title">GPU-82f7...</div>
+                                <div class="gpu-box-subtitle">H100 80GB HBM3</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="gpu-arrow">
+                        <svg viewBox="0 0 24 24"><path d="M12 4v16m0 0l-6-6m6 6l6-6"/></svg>
+                    </div>
+
+                    <div class="gpu-layer">
+                        <div class="gpu-layer-label">
+                            <span class="tag tag-blue">Resource</span>
+                        </div>
+                        <div class="gpu-layer-content">
+                            <div class="gpu-box resource" onclick="showGpuInfo('resource-full')">
+                                <div class="gpu-box-title">GPU-82f7...</div>
+                                <div class="gpu-box-subtitle">= Physical UUID (동일)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="gpu-arrow">
+                        <svg viewBox="0 0 24 24"><path d="M12 4v16m0 0l-6-6m6 6l6-6"/></svg>
+                    </div>
+
+                    <div class="gpu-layer">
+                        <div class="gpu-layer-label">
+                            <span class="tag tag-green">Context</span>
+                        </div>
+                        <div class="gpu-layer-content">
+                            <div class="gpu-box context" onclick="showGpuInfo('context-full')">
+                                <div class="gpu-box-title">cuda:0</div>
+                                <div class="gpu-box-subtitle">Pod-A / PID: 12345</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="gpu-info-panel" id="gpu-info-full">
+                        <strong>Full GPU 케이스</strong>
+                        <p style="margin-top: 8px; color: var(--text-secondary);">
+                            MIG가 비활성화된 일반적인 경우입니다.<br>
+                            resource_uuid = physical_gpu_uuid (동일한 값)<br>
+                            하나의 Pod이 전체 GPU를 독점 사용합니다.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- MIG Case -->
+                <div class="gpu-diagram" id="gpu-mig">
+                    <div class="gpu-layer">
+                        <div class="gpu-layer-label">
+                            <span class="tag tag-purple">Physical</span>
+                        </div>
+                        <div class="gpu-layer-content">
+                            <div class="gpu-box physical" onclick="showGpuInfo('physical-mig')">
+                                <div class="gpu-box-title">GPU-82f7...</div>
+                                <div class="gpu-box-subtitle">H100 80GB HBM3</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="gpu-arrow">
+                        <svg viewBox="0 0 24 24"><path d="M12 4v16m0 0l-6-6m6 6l6-6"/></svg>
+                    </div>
+
+                    <div class="gpu-layer">
+                        <div class="gpu-layer-label">
+                            <span class="tag tag-blue">Resource</span>
+                        </div>
+                        <div class="gpu-layer-content">
+                            <div class="gpu-box resource" onclick="showGpuInfo('mig-a')">
+                                <div class="gpu-box-title">MIG-aaa...</div>
+                                <div class="gpu-box-subtitle">1g.10gb (10GB)</div>
+                            </div>
+                            <div class="gpu-box resource" onclick="showGpuInfo('mig-b')">
+                                <div class="gpu-box-title">MIG-bbb...</div>
+                                <div class="gpu-box-subtitle">1g.10gb (10GB)</div>
+                            </div>
+                            <div class="gpu-box resource" onclick="showGpuInfo('mig-c')">
+                                <div class="gpu-box-title">MIG-ccc...</div>
+                                <div class="gpu-box-subtitle">3g.40gb (40GB)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="gpu-arrow">
+                        <svg viewBox="0 0 24 24"><path d="M12 4v16m0 0l-6-6m6 6l6-6"/></svg>
+                    </div>
+
+                    <div class="gpu-layer">
+                        <div class="gpu-layer-label">
+                            <span class="tag tag-green">Context</span>
+                        </div>
+                        <div class="gpu-layer-content">
+                            <div class="gpu-box context">
+                                <div class="gpu-box-title">cuda:0</div>
+                                <div class="gpu-box-subtitle">Pod-A</div>
+                            </div>
+                            <div class="gpu-box context">
+                                <div class="gpu-box-title">cuda:0</div>
+                                <div class="gpu-box-subtitle">Pod-B</div>
+                            </div>
+                            <div class="gpu-box context">
+                                <div class="gpu-box-title">cuda:0</div>
+                                <div class="gpu-box-subtitle">Pod-C</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="gpu-info-panel" id="gpu-info-mig">
+                        <strong style="color: var(--accent-yellow);">⚠️ MIG 케이스의 핵심 문제</strong>
+                        <p style="margin-top: 8px; color: var(--text-secondary);">
+                            모든 Pod에서 <code>cuda:0</code>으로 보입니다!<br><br>
+                            <strong>해결:</strong> resource_uuid(MIG UUID)를 PK로 사용<br>
+                            → MIG-aaa, MIG-bbb, MIG-ccc로 구분 가능<br>
+                            → physical_gpu_uuid로 같은 카드임을 알 수 있음
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Time-slicing Case -->
+                <div class="gpu-diagram" id="gpu-timeslice">
+                    <div class="gpu-layer">
+                        <div class="gpu-layer-label">
+                            <span class="tag tag-purple">Physical</span>
+                        </div>
+                        <div class="gpu-layer-content">
+                            <div class="gpu-box physical">
+                                <div class="gpu-box-title">GPU-82f7...</div>
+                                <div class="gpu-box-subtitle">H100 80GB HBM3</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="gpu-arrow">
+                        <svg viewBox="0 0 24 24"><path d="M12 4v16m0 0l-6-6m6 6l6-6"/></svg>
+                    </div>
+
+                    <div class="gpu-layer">
+                        <div class="gpu-layer-label">
+                            <span class="tag tag-blue">Resource</span>
+                        </div>
+                        <div class="gpu-layer-content">
+                            <div class="gpu-box resource" style="border-style: dashed;">
+                                <div class="gpu-box-title">GPU-82f7...</div>
+                                <div class="gpu-box-subtitle">Shared (is_shared: true)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="gpu-arrow">
+                        <svg viewBox="0 0 24 24"><path d="M12 4v16m0 0l-6-6m6 6l6-6"/></svg>
+                    </div>
+
+                    <div class="gpu-layer">
+                        <div class="gpu-layer-label">
+                            <span class="tag tag-green">Context</span>
+                        </div>
+                        <div class="gpu-layer-content">
+                            <div class="gpu-box context" id="ts-pod-a">
+                                <div class="gpu-box-title">cuda:0</div>
+                                <div class="gpu-box-subtitle">Pod-A (t=0,2,4...)</div>
+                            </div>
+                            <div class="gpu-box context" id="ts-pod-b" style="opacity: 0.5;">
+                                <div class="gpu-box-title">cuda:0</div>
+                                <div class="gpu-box-subtitle">Pod-B (t=1,3,5...)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="gpu-info-panel">
+                        <strong style="color: var(--accent-red);">⚠️ Time-slicing의 한계</strong>
+                        <p style="margin-top: 8px; color: var(--text-secondary);">
+                            resource_uuid가 동일합니다 (MIG와 다름).<br><br>
+                            <strong>문제:</strong> 같은 GPU를 여러 Pod이 시분할로 공유<br>
+                            <strong>해결:</strong> Context Layer의 workload_id로 구분<br>
+                            → 하지만 동시 실행 시 간섭 분석은 어려움
+                        </p>
+                        <button class="btn" style="margin-top: 12px;" onclick="toggleTimeSlice()">Toggle Time-slice</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Trace/Span Timeline -->
+        <section id="trace" class="section">
+            <h2 class="section-title">Trace/Span Hierarchy</h2>
+            <p class="section-desc">하나의 이미지 생성 추론이 어떻게 Span들로 분해되는지</p>
+
+            <div class="card">
+                <div class="timeline-header">
+                    <div>
+                        <strong>Trace: image_generation</strong>
+                        <span class="tag tag-blue" style="margin-left: 8px;">trace_id: abc123</span>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-secondary);">Total: </span>
+                        <strong>4,247ms</strong>
+                    </div>
+                </div>
+
+                <div class="timeline-container">
+                    <div class="timeline-ruler">
+                        <span>0ms</span>
+                        <span>1000ms</span>
+                        <span>2000ms</span>
+                        <span>3000ms</span>
+                        <span>4000ms</span>
+                    </div>
+
+                    <!-- Root Span -->
+                    <div class="timeline-row">
+                        <div class="timeline-label">root</div>
+                        <div class="timeline-bar-container">
+                            <div class="timeline-bar root" style="left: 0%; width: 100%;"
+                                 data-info='{"name":"image_generation","duration":"4,247ms","gpu":"GPU 0,1,2,3"}'>
+                                image_generation
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VIT Span -->
+                    <div class="timeline-row">
+                        <div class="timeline-label">├─ vit</div>
+                        <div class="timeline-bar-container">
+                            <div class="timeline-bar vit" style="left: 0%; width: 7.5%;"
+                                 data-info='{"name":"vit_embedding","duration":"320ms","gpu":"GPU 0","model":"ViT-L/14"}'>
+                                vit_embedding (320ms)
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Diffusion Span -->
+                    <div class="timeline-row">
+                        <div class="timeline-label">├─ diff</div>
+                        <div class="timeline-bar-container">
+                            <div class="timeline-bar diffusion" style="left: 7.5%; width: 76%;"
+                                 data-info='{"name":"diffusion","duration":"3,224ms","gpu":"GPU 0,1,2,3","steps":20}'>
+                                diffusion (3,224ms)
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Diffusion Steps (sample) -->
+                    <div class="timeline-row">
+                        <div class="timeline-label">│ ├─ s0</div>
+                        <div class="timeline-bar-container">
+                            <div class="timeline-bar step" style="left: 7.5%; width: 3.8%;"
+                                 data-info='{"name":"unet_step_0","duration":"162ms","gpu":"GPU 0,1"}'>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="timeline-row">
+                        <div class="timeline-label">│ ├─ s1</div>
+                        <div class="timeline-bar-container">
+                            <div class="timeline-bar step" style="left: 11.3%; width: 3.7%;"
+                                 data-info='{"name":"unet_step_1","duration":"158ms","gpu":"GPU 0,1"}'>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="timeline-row">
+                        <div class="timeline-label">│ └─ ...</div>
+                        <div class="timeline-bar-container">
+                            <div class="timeline-bar step" style="left: 15%; width: 68.5%; opacity: 0.5;"
+                                 data-info='{"name":"unet_steps_2-19","duration":"2,904ms","gpu":"GPU 0,1,2,3"}'>
+                                steps 2-19...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VAE Span -->
+                    <div class="timeline-row">
+                        <div class="timeline-label">└─ vae</div>
+                        <div class="timeline-bar-container">
+                            <div class="timeline-bar vae" style="left: 83.5%; width: 4.2%;"
+                                 data-info='{"name":"vae_decode","duration":"180ms","gpu":"GPU 0","model":"SDXL-VAE"}'>
+                                vae (180ms)
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- GPU Attribution Row -->
+                    <div class="timeline-row timeline-gpu-row">
+                        <div class="timeline-label" style="color: var(--text-secondary);">GPU</div>
+                        <div class="timeline-bar-container" style="background: none; display: flex; gap: 2px;">
+                            <div style="width: 7.5%; background: var(--accent-blue); height: 100%; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px;">0</div>
+                            <div style="width: 76%; background: var(--accent-green); height: 100%; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px;">0,1,2,3</div>
+                            <div style="width: 4.2%; background: var(--accent-yellow); height: 100%; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px;">0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Span Detail</div>
+                <div id="spanDetail" style="color: var(--text-secondary);">
+                    Span을 클릭하면 상세 정보가 표시됩니다.
+                </div>
+            </div>
+
+            <!-- Tooltip -->
+            <div class="timeline-tooltip" id="timelineTooltip"></div>
+        </section>
+
+        <!-- Section 4: SDK Internals -->
+        <section id="sdk" class="section">
+            <h2 class="section-title">SDK Internals</h2>
+            <p class="section-desc">Ring Buffer와 비동기 전송 메커니즘</p>
+
+            <div class="sdk-container">
+                <div class="card">
+                    <div class="sdk-thread">
+                        <div class="sdk-thread-title">
+                            <span class="tag tag-red">Critical</span>
+                            Inference Thread
+                        </div>
+                        <p style="color: var(--text-secondary); font-size: 14px;">
+                            추론이 실행되는 메인 스레드입니다.<br>
+                            <strong>절대 블로킹되면 안 됩니다.</strong>
+                        </p>
+
+                        <div style="margin-top: 20px; padding: 12px; background: var(--bg-secondary); border-radius: 6px; font-family: monospace; font-size: 13px;">
+                            <span style="color: var(--accent-purple);">with</span> axonize.span(<span style="color: var(--accent-green);">"forward"</span>):<br>
+                            &nbsp;&nbsp;result = model.forward(x)<br>
+                            &nbsp;&nbsp;<span style="color: var(--text-secondary);"># span.end() → buffer.enqueue()</span><br>
+                            &nbsp;&nbsp;<span style="color: var(--text-secondary);"># &lt; 10μs, non-blocking</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="sdk-thread">
+                        <div class="sdk-thread-title">
+                            <span class="tag tag-green">Background</span>
+                            Export Thread
+                        </div>
+                        <p style="color: var(--text-secondary); font-size: 14px;">
+                            별도 스레드에서 비동기로 실행됩니다.<br>
+                            추론 성능에 영향을 주지 않습니다.
+                        </p>
+
+                        <div style="margin-top: 16px;">
+                            <strong style="font-size: 13px;">Ring Buffer</strong>
+                            <div class="ring-buffer" id="ringBuffer">
+                                <!-- Generated by JS -->
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary);">
+                                <span>Capacity: 100</span>
+                                <span>Filled: <span id="bufferCount">0</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Simulation</div>
+                <div class="sdk-controls">
+                    <button class="btn btn-primary" onclick="generateSpans()">Generate 10 Spans</button>
+                    <button class="btn" onclick="flushBuffer()">Flush Buffer</button>
+                    <button class="btn" onclick="resetBuffer()">Reset</button>
+                </div>
+
+                <div class="sdk-metrics">
+                    <div class="sdk-metric">
+                        <div class="sdk-metric-label">Spans Created</div>
+                        <div class="sdk-metric-value" id="spansCreated">0</div>
+                    </div>
+                    <div class="sdk-metric">
+                        <div class="sdk-metric-label">Spans Sent</div>
+                        <div class="sdk-metric-value" id="spansSent">0</div>
+                    </div>
+                    <div class="sdk-metric">
+                        <div class="sdk-metric-label">Avg Overhead</div>
+                        <div class="sdk-metric-value" id="avgOverhead">0 μs</div>
+                    </div>
+                    <div class="sdk-metric">
+                        <div class="sdk-metric-label">Dropped</div>
+                        <div class="sdk-metric-value" id="spansDropped">0</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 5: Edge Cases -->
+        <section id="edge" class="section">
+            <h2 class="section-title">Edge Cases</h2>
+            <p class="section-desc">다양한 문제 상황에서의 시스템 동작</p>
+
+            <div class="card">
+                <div class="edge-case-selector">
+                    <button class="edge-case-btn active" data-case="normal">정상 동작</button>
+                    <button class="edge-case-btn" data-case="error">추론 에러</button>
+                    <button class="edge-case-btn" data-case="network">네트워크 장애</button>
+                    <button class="edge-case-btn" data-case="overflow">버퍼 오버플로우</button>
+                    <button class="edge-case-btn" data-case="multigpu">멀티 GPU</button>
+                </div>
+
+                <div class="edge-simulation" id="edgeSimulation">
+                    <!-- Populated by JS -->
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <button class="btn btn-primary" onclick="runEdgeSimulation()">Run Simulation</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 6: Query Flow -->
+        <section id="query" class="section">
+            <h2 class="section-title">Query Flow</h2>
+            <p class="section-desc">대시보드에서 데이터 조회 흐름</p>
+
+            <div class="query-container">
+                <div class="card">
+                    <div class="card-title">SQL Query</div>
+                    <textarea class="query-input" id="queryInput">SELECT
+    gpu_model,
+    AVG(duration_ms) as avg_duration,
+    COUNT(*) as count
+FROM spans
+WHERE gpu_model = 'H100'
+  AND start_time > now() - INTERVAL 1 HOUR
+GROUP BY gpu_model</textarea>
+                    <button class="btn btn-primary" style="margin-top: 12px;" onclick="runQuery()">Execute Query</button>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Query Flow</div>
+                    <div class="query-flow">
+                        <div class="query-flow-step" id="qf-dashboard">
+                            <span style="font-size: 20px;">🖥️</span>
+                            <div>
+                                <strong>Dashboard</strong>
+                                <div style="font-size: 12px; color: var(--text-secondary);">User request</div>
+                            </div>
+                        </div>
+                        <div class="query-flow-step" id="qf-api">
+                            <span style="font-size: 20px;">🔌</span>
+                            <div>
+                                <strong>Query Service</strong>
+                                <div style="font-size: 12px; color: var(--text-secondary);">Parse & validate</div>
+                            </div>
+                        </div>
+                        <div class="query-flow-step" id="qf-db">
+                            <span style="font-size: 20px;">💾</span>
+                            <div>
+                                <strong>ClickHouse</strong>
+                                <div style="font-size: 12px; color: var(--text-secondary);">Execute query</div>
+                            </div>
+                        </div>
+                        <div class="query-flow-step" id="qf-result">
+                            <span style="font-size: 20px;">📊</span>
+                            <div>
+                                <strong>Result</strong>
+                                <div style="font-size: 12px; color: var(--text-secondary);">Return data</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Query Result</div>
+                <div class="query-result" id="queryResult">
+                    <span style="color: var(--text-secondary);">Execute query to see results</span>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // ================================================
+        // Navigation
+        // ================================================
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.section).classList.add('active');
+            });
+        });
+
+        // ================================================
+        // Section 1: Data Flow
+        // ================================================
+        const flowDetails = {
+            request: {
+                title: 'Request (Client)',
+                desc: '클라이언트에서 추론 요청이 발생합니다. HTTP/gRPC를 통해 추론 서버로 전송됩니다.',
+                metrics: ['Request ID 생성', 'Timestamp 기록', 'Trace 시작']
+            },
+            sdk: {
+                title: 'Axonize SDK',
+                desc: 'SDK가 Span을 생성하고 메트릭을 수집합니다. 이 과정은 10μs 미만으로 추론에 영향을 주지 않습니다.',
+                metrics: ['Span 생성 (< 1μs)', 'GPU 메트릭 캐시 참조', 'Buffer에 enqueue']
+            },
+            buffer: {
+                title: 'Ring Buffer',
+                desc: 'Lock-free Ring Buffer에 Span이 저장됩니다. 버퍼가 가득 차면 가장 오래된 데이터가 드롭됩니다.',
+                metrics: ['Capacity: 10,000', 'Non-blocking enqueue', 'Background thread가 drain']
+            },
+            server: {
+                title: 'Axonize Server',
+                desc: 'OTLP 프로토콜로 Span을 수신합니다. 검증 후 ClickHouse에 저장합니다.',
+                metrics: ['gRPC 수신', 'Validation', 'Batch insert']
+            },
+            db: {
+                title: 'ClickHouse',
+                desc: '시계열 데이터베이스에 Span이 저장됩니다. 대시보드에서 조회할 수 있습니다.',
+                metrics: ['Columnar storage', 'Partitioned by date', 'TTL: 30 days']
+            }
+        };
+
+        document.querySelectorAll('.flow-box').forEach(box => {
+            box.addEventListener('click', () => {
+                const step = box.dataset.step;
+                const detail = flowDetails[step];
+                document.getElementById('flowDetails').innerHTML = `
+                    <strong>${detail.title}</strong>
+                    <p style="margin: 8px 0; color: var(--text-secondary);">${detail.desc}</p>
+                    <ul style="margin-top: 12px; padding-left: 20px; color: var(--text-secondary);">
+                        ${detail.metrics.map(m => `<li>${m}</li>`).join('')}
+                    </ul>
+                `;
+            });
+        });
+
+        function playDataFlow() {
+            const boxes = document.querySelectorAll('.flow-box');
+            const packet = document.getElementById('flowPacket');
+
+            boxes.forEach(b => b.classList.remove('active'));
+            packet.classList.remove('animate');
+
+            void packet.offsetWidth; // Force reflow
+            packet.classList.add('animate');
+
+            const steps = ['request', 'sdk', 'buffer', 'server', 'db'];
+            steps.forEach((step, i) => {
+                setTimeout(() => {
+                    boxes.forEach(b => b.classList.remove('active'));
+                    document.querySelector(`[data-step="${step}"]`).classList.add('active');
+                }, i * 600);
+            });
+        }
+
+        // ================================================
+        // Section 2: GPU 3-Layer
+        // ================================================
+        document.querySelectorAll('.gpu-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.gpu-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.gpu-diagram').forEach(d => d.classList.remove('active'));
+
+                tab.classList.add('active');
+                document.getElementById(`gpu-${tab.dataset.case}`).classList.add('active');
+            });
+        });
+
+        function showGpuInfo(type) {
+            // Could expand to show more detailed info
+            console.log('Show info for:', type);
+        }
+
+        let timeSliceInterval;
+        function toggleTimeSlice() {
+            const podA = document.getElementById('ts-pod-a');
+            const podB = document.getElementById('ts-pod-b');
+
+            if (timeSliceInterval) {
+                clearInterval(timeSliceInterval);
+                timeSliceInterval = null;
+                podA.style.opacity = '1';
+                podB.style.opacity = '0.5';
+                return;
+            }
+
+            let toggle = false;
+            timeSliceInterval = setInterval(() => {
+                toggle = !toggle;
+                podA.style.opacity = toggle ? '0.5' : '1';
+                podB.style.opacity = toggle ? '1' : '0.5';
+            }, 500);
+        }
+
+        // ================================================
+        // Section 3: Trace/Span Timeline
+        // ================================================
+        const tooltip = document.getElementById('timelineTooltip');
+
+        document.querySelectorAll('.timeline-bar').forEach(bar => {
+            bar.addEventListener('mouseenter', (e) => {
+                const info = JSON.parse(bar.dataset.info);
+                tooltip.innerHTML = `
+                    <strong>${info.name}</strong><br>
+                    <span style="color: var(--text-secondary);">Duration:</span> ${info.duration}<br>
+                    <span style="color: var(--text-secondary);">GPU:</span> ${info.gpu}
+                    ${info.model ? `<br><span style="color: var(--text-secondary);">Model:</span> ${info.model}` : ''}
+                    ${info.steps ? `<br><span style="color: var(--text-secondary);">Steps:</span> ${info.steps}` : ''}
+                `;
+                tooltip.classList.add('show');
+            });
+
+            bar.addEventListener('mousemove', (e) => {
+                tooltip.style.left = e.pageX + 10 + 'px';
+                tooltip.style.top = e.pageY + 10 + 'px';
+            });
+
+            bar.addEventListener('mouseleave', () => {
+                tooltip.classList.remove('show');
+            });
+
+            bar.addEventListener('click', () => {
+                const info = JSON.parse(bar.dataset.info);
+                document.getElementById('spanDetail').innerHTML = `
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                        <div>
+                            <div style="color: var(--text-secondary); font-size: 12px;">Span Name</div>
+                            <div style="font-weight: 600;">${info.name}</div>
+                        </div>
+                        <div>
+                            <div style="color: var(--text-secondary); font-size: 12px;">Duration</div>
+                            <div style="font-weight: 600;">${info.duration}</div>
+                        </div>
+                        <div>
+                            <div style="color: var(--text-secondary); font-size: 12px;">GPU</div>
+                            <div style="font-weight: 600;">${info.gpu}</div>
+                        </div>
+                        <div>
+                            <div style="color: var(--text-secondary); font-size: 12px;">Model</div>
+                            <div style="font-weight: 600;">${info.model || 'N/A'}</div>
+                        </div>
+                    </div>
+                `;
+            });
+        });
+
+        // ================================================
+        // Section 4: SDK Internals
+        // ================================================
+        const BUFFER_SIZE = 50;
+        let bufferState = new Array(BUFFER_SIZE).fill(false);
+        let sdkMetrics = { created: 0, sent: 0, dropped: 0 };
+
+        function initRingBuffer() {
+            const container = document.getElementById('ringBuffer');
+            container.innerHTML = '';
+            for (let i = 0; i < BUFFER_SIZE; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'ring-slot';
+                slot.id = `slot-${i}`;
+                container.appendChild(slot);
+            }
+        }
+
+        function updateBufferUI() {
+            bufferState.forEach((filled, i) => {
+                const slot = document.getElementById(`slot-${i}`);
+                slot.className = filled ? 'ring-slot filled' : 'ring-slot';
+            });
+            document.getElementById('bufferCount').textContent = bufferState.filter(x => x).length;
+            document.getElementById('spansCreated').textContent = sdkMetrics.created;
+            document.getElementById('spansSent').textContent = sdkMetrics.sent;
+            document.getElementById('spansDropped').textContent = sdkMetrics.dropped;
+        }
+
+        function generateSpans() {
+            for (let i = 0; i < 10; i++) {
+                setTimeout(() => {
+                    const emptyIdx = bufferState.findIndex(x => !x);
+                    if (emptyIdx === -1) {
+                        // Buffer full - drop oldest
+                        bufferState.shift();
+                        bufferState.push(true);
+                        sdkMetrics.dropped++;
+                    } else {
+                        bufferState[emptyIdx] = true;
+                    }
+                    sdkMetrics.created++;
+                    updateBufferUI();
+
+                    // Show overhead
+                    const overhead = Math.floor(Math.random() * 5) + 3;
+                    document.getElementById('avgOverhead').textContent = `${overhead} μs`;
+                }, i * 100);
+            }
+        }
+
+        function flushBuffer() {
+            const filledCount = bufferState.filter(x => x).length;
+            if (filledCount === 0) return;
+
+            // Animate sending
+            bufferState.forEach((filled, i) => {
+                if (filled) {
+                    const slot = document.getElementById(`slot-${i}`);
+                    slot.classList.add('sending');
+                    setTimeout(() => {
+                        slot.classList.remove('sending');
+                    }, 500);
+                }
+            });
+
+            setTimeout(() => {
+                sdkMetrics.sent += filledCount;
+                bufferState = new Array(BUFFER_SIZE).fill(false);
+                updateBufferUI();
+            }, 600);
+        }
+
+        function resetBuffer() {
+            bufferState = new Array(BUFFER_SIZE).fill(false);
+            sdkMetrics = { created: 0, sent: 0, dropped: 0 };
+            updateBufferUI();
+        }
+
+        initRingBuffer();
+
+        // ================================================
+        // Section 5: Edge Cases
+        // ================================================
+        const edgeCases = {
+            normal: {
+                title: '정상 동작',
+                steps: [
+                    { status: 'success', title: '추론 요청 수신', desc: 'HTTP 200 OK' },
+                    { status: 'success', title: 'Span 생성', desc: 'trace_id: abc123 생성' },
+                    { status: 'success', title: '추론 실행', desc: 'GPU 0에서 3.2초 소요' },
+                    { status: 'success', title: 'Span 완료', desc: 'status: OK, buffer에 저장' },
+                    { status: 'success', title: '서버 전송', desc: 'gRPC 전송 성공' },
+                    { status: 'success', title: 'DB 저장', desc: 'ClickHouse INSERT 완료' }
+                ]
+            },
+            error: {
+                title: '추론 에러 발생',
+                steps: [
+                    { status: 'success', title: '추론 요청 수신', desc: 'HTTP 200 OK' },
+                    { status: 'success', title: 'Span 생성', desc: 'trace_id: def456 생성' },
+                    { status: 'error', title: '추론 실행 실패', desc: 'RuntimeError: CUDA OOM!' },
+                    { status: 'warning', title: 'Span 완료 (에러)', desc: '__exit__에서 자동 처리, status: ERROR' },
+                    { status: 'success', title: '서버 전송', desc: '에러 span도 정상 전송' },
+                    { status: 'success', title: 'DB 저장', desc: 'error_message 컬럼에 기록' }
+                ]
+            },
+            network: {
+                title: '네트워크 장애',
+                steps: [
+                    { status: 'success', title: 'Span 생성', desc: '정상 생성' },
+                    { status: 'success', title: 'Buffer 저장', desc: 'Ring buffer에 저장' },
+                    { status: 'error', title: '서버 전송 실패', desc: 'Connection refused' },
+                    { status: 'warning', title: '로컬 버퍼 저장', desc: '디스크에 임시 저장' },
+                    { status: 'warning', title: '재전송 대기', desc: '10초 후 재시도 예정' },
+                    { status: 'success', title: '네트워크 복구 후 전송', desc: '디스크에서 읽어서 전송' }
+                ]
+            },
+            overflow: {
+                title: '버퍼 오버플로우',
+                steps: [
+                    { status: 'success', title: '고부하 상황', desc: '초당 10,000 spans 생성' },
+                    { status: 'warning', title: '버퍼 80% 도달', desc: '경고 로그 출력' },
+                    { status: 'error', title: '버퍼 100% 도달', desc: '더 이상 저장 불가' },
+                    { status: 'error', title: 'Drop Oldest', desc: '오래된 span 100개 드롭' },
+                    { status: 'warning', title: 'axonize_spans_dropped 메트릭 증가', desc: 'Prometheus에서 알림' },
+                    { status: 'success', title: '부하 감소 후 정상화', desc: '드롭 없이 처리 중' }
+                ]
+            },
+            multigpu: {
+                title: '멀티 GPU 분산 추론',
+                steps: [
+                    { status: 'success', title: 'Trace 시작 (Rank 0)', desc: 'trace_id: ghi789 생성' },
+                    { status: 'warning', title: 'Context 전파', desc: 'trace_id를 모든 rank에 broadcast' },
+                    { status: 'success', title: 'GPU 0: Layers 0-7', desc: 'span_id: s1, 800ms' },
+                    { status: 'success', title: 'GPU 1: Layers 8-15', desc: 'span_id: s2, 750ms' },
+                    { status: 'success', title: 'GPU 2-3: Layers 16-31', desc: 'span_id: s3,s4, 820ms' },
+                    { status: 'success', title: 'Trace 집계', desc: '4개 span이 하나의 trace로 그룹화' }
+                ]
+            }
+        };
+
+        let currentEdgeCase = 'normal';
+
+        document.querySelectorAll('.edge-case-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.edge-case-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentEdgeCase = btn.dataset.case;
+                renderEdgeCase(currentEdgeCase, false);
+            });
+        });
+
+        function renderEdgeCase(caseName, animate = false) {
+            const caseData = edgeCases[caseName];
+            const container = document.getElementById('edgeSimulation');
+
+            container.innerHTML = `
+                <h3 style="margin-bottom: 16px;">${caseData.title}</h3>
+                ${caseData.steps.map((step, i) => `
+                    <div class="edge-step" id="edge-step-${i}" style="${animate ? 'opacity: 0.3' : ''}">
+                        <div class="edge-step-num ${animate ? '' : step.status}">${i + 1}</div>
+                        <div class="edge-step-content">
+                            <div class="edge-step-title">${step.title}</div>
+                            <div class="edge-step-desc">${step.desc}</div>
+                        </div>
+                        <div class="edge-step-status tag tag-${step.status === 'success' ? 'green' : step.status === 'warning' ? 'yellow' : 'red'}">
+                            ${step.status === 'success' ? 'OK' : step.status === 'warning' ? 'WARN' : 'ERROR'}
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+        }
+
+        function runEdgeSimulation() {
+            const caseData = edgeCases[currentEdgeCase];
+            renderEdgeCase(currentEdgeCase, true);
+
+            caseData.steps.forEach((step, i) => {
+                setTimeout(() => {
+                    const stepEl = document.getElementById(`edge-step-${i}`);
+                    stepEl.style.opacity = '1';
+                    stepEl.querySelector('.edge-step-num').classList.add(step.status);
+                }, i * 500);
+            });
+        }
+
+        renderEdgeCase('normal');
+
+        // ================================================
+        // Section 6: Query Flow
+        // ================================================
+        function runQuery() {
+            const steps = ['qf-dashboard', 'qf-api', 'qf-db', 'qf-result'];
+
+            steps.forEach(s => {
+                document.getElementById(s).classList.remove('active', 'done');
+            });
+
+            steps.forEach((step, i) => {
+                setTimeout(() => {
+                    if (i > 0) {
+                        document.getElementById(steps[i-1]).classList.remove('active');
+                        document.getElementById(steps[i-1]).classList.add('done');
+                    }
+                    document.getElementById(step).classList.add('active');
+
+                    if (i === steps.length - 1) {
+                        setTimeout(() => {
+                            document.getElementById(step).classList.remove('active');
+                            document.getElementById(step).classList.add('done');
+                            showQueryResult();
+                        }, 500);
+                    }
+                }, i * 600);
+            });
+        }
+
+        function showQueryResult() {
+            document.getElementById('queryResult').innerHTML = `
+                <div style="margin-bottom: 8px; color: var(--accent-green);">Query executed in 42ms</div>
+                <table class="query-result-table">
+                    <thead>
+                        <tr>
+                            <th>gpu_model</th>
+                            <th>avg_duration</th>
+                            <th>count</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>NVIDIA H100 80GB</td>
+                            <td>1,234.5 ms</td>
+                            <td>15,432</td>
+                        </tr>
+                    </tbody>
+                </table>
+            `;
+        }
+    </script>
+</body>
+</html>
