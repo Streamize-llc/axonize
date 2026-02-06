@@ -1,7 +1,7 @@
 # Axonize Architecture Document
 
-> **Version**: 0.1.0 (Draft)
-> **Last Updated**: 2024-12-28
+> **Version**: 0.1.1 (Draft)
+> **Last Updated**: 2025-12-29
 > **Status**: Design Phase
 
 ---
@@ -165,7 +165,7 @@ Request ──→ VIT Embedding ──→ Diffusion (20 steps) ──→ VAE Dec
 │     ▼                                                            │
 │  2. SDK creates Trace                                            │
 │     │  - trace_id generated                                      │
-│     │  - queue_start timestamp                                   │
+│     │  - start_time timestamp                                    │
 │     │                                                            │
 │     ▼                                                            │
 │  3. SDK creates Span for each sub-operation                      │
@@ -235,9 +235,6 @@ Axonize의 데이터 모델은 **OpenTelemetry 표준을 기반**으로 하되, 
 │       │           └── "vae_decode"                               │
 │       │               └── GPUAttribution                         │
 │       │                                                          │
-│       └── QueueMetrics                                           │
-│           └── 대기 시간 정보                                      │
-│                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -254,26 +251,14 @@ class Trace:
     trace_id: str               # UUID v4, 전역 고유
 
     # === 타이밍 ===
-    request_time: datetime      # 클라이언트가 요청을 보낸 시간
-    queue_start: datetime       # 추론 큐에 들어간 시간
-    process_start: datetime     # 실제 처리 시작 시간
-    process_end: datetime       # 처리 완료 시간
+    start_time: datetime        # 추론 시작 시간
+    end_time: datetime          # 추론 완료 시간
 
     # === 계산 필드 ===
     @property
-    def queue_wait_ms(self) -> float:
-        """큐 대기 시간"""
-        return (self.process_start - self.queue_start).total_seconds() * 1000
-
-    @property
-    def process_duration_ms(self) -> float:
-        """실제 처리 시간"""
-        return (self.process_end - self.process_start).total_seconds() * 1000
-
-    @property
-    def total_duration_ms(self) -> float:
-        """전체 소요 시간 (대기 + 처리)"""
-        return (self.process_end - self.queue_start).total_seconds() * 1000
+    def duration_ms(self) -> float:
+        """전체 소요 시간"""
+        return (self.end_time - self.start_time).total_seconds() * 1000
 
     # === 관계 ===
     spans: List[Span]           # 하위 작업들
@@ -291,7 +276,6 @@ class Trace:
 ```
 
 **설계 근거:**
-- `queue_wait_ms` 분리: 실제 추론 성능과 인프라 용량 문제를 구분하기 위함
 - `service_name`, `environment`: 멀티 서비스 환경에서 필터링 지원
 
 ### 4.3 Span
@@ -554,14 +538,17 @@ class ResourceContext:
     # === 사용자 관점 ===
     user_label: str             # "cuda:0", "cuda:1"
 
-    # === K8s 환경 ===
-    pod_id: Optional[str]
-    pod_namespace: Optional[str]
-    container_id: Optional[str]
-
-    # === 프로세스 레벨 ===
+    # === 프로세스 정보 ===
+    hostname: str               # 머신 이름
     process_id: int
     process_name: str           # "python"
+
+    # === 환경별 메타데이터 (범용) ===
+    labels: Dict[str, str]      # 오케스트레이터/환경별 자유롭게 확장
+    # K8s:        {"k8s.pod.name": "...", "k8s.namespace": "...", "k8s.node.name": "..."}
+    # Docker:     {"docker.container.id": "...", "docker.container.name": "..."}
+    # Bare Metal: {"datacenter": "...", "rack": "..."}
+    # AWS ECS:    {"aws.ecs.cluster": "...", "aws.ecs.task.id": "..."}
 
     # === 시간 ===
     attached_at: datetime
@@ -795,29 +782,6 @@ with axonize.llm_span("generation", model="llama-70b") as span:
     for token in model.generate_stream(prompt):
         span.record_token()  # TTFT, TPOT 자동 계산
         yield token
-
-
-# ============================================
-# 큐 대기 시간 추적
-# ============================================
-# 추론 서버 프레임워크 통합
-class InferenceHandler:
-    async def handle(self, request):
-        # 큐 진입 시점 기록
-        trace = axonize.start_trace("inference")
-        trace.mark_queue_start()
-
-        # 큐 대기
-        await self.queue.put(request)
-
-        # 처리 시작 시점 기록
-        trace.mark_process_start()
-
-        result = await self.process(request)
-
-        # 완료
-        trace.end()
-        return result
 ```
 
 ### 5.5 OpenTelemetry Compatibility
@@ -1013,9 +977,7 @@ CREATE TABLE traces (
     -- 타이밍
     start_time DateTime64(3),
     end_time DateTime64(3),
-    queue_wait_ms Float64,
-    process_duration_ms Float64,
-    total_duration_ms Float64,
+    duration_ms Float64,
 
     -- 메타데이터
     service_name String,
@@ -1162,22 +1124,27 @@ CREATE TABLE resource_contexts (
     -- 사용자 관점
     user_label VARCHAR(16) NOT NULL,  -- cuda:0
 
-    -- K8s
-    pod_id VARCHAR(128),
-    pod_namespace VARCHAR(64),
-    container_id VARCHAR(64),
-
-    -- 프로세스
+    -- 프로세스 정보
+    hostname VARCHAR(128) NOT NULL,
     process_id INTEGER,
     process_name VARCHAR(64),
+
+    -- 환경별 메타데이터 (범용)
+    -- K8s: {"k8s.pod.name": "...", "k8s.namespace": "..."}
+    -- Docker: {"docker.container.id": "..."}
+    -- Bare Metal: {"datacenter": "...", "rack": "..."}
+    labels JSONB DEFAULT '{}',
 
     -- 시간
     attached_at TIMESTAMP NOT NULL,
     detached_at TIMESTAMP,
 
     INDEX idx_resource_uuid (resource_uuid),
-    INDEX idx_pod_id (pod_id)
+    INDEX idx_hostname (hostname)
 );
+
+-- labels 내 특정 키로 검색 가능
+CREATE INDEX idx_labels ON resource_contexts USING GIN (labels);
 ```
 
 ---
@@ -1265,7 +1232,7 @@ span.end() → atomic CAS → buffer[idx] = span
 │  • 단일 노드, 단일/멀티 GPU                                       │
 │  • NVIDIA GPU only (pynvml)                                     │
 │  • Full GPU + MIG 지원                                           │
-│  • Docker/K8s 기본 환경                                          │
+│  • 환경 무관 (Bare Metal, Docker, K8s, Cloud 등)                 │
 │  • 기본 대시보드 (Trace 뷰, GPU 뷰)                               │
 │  • OTel 호환 export                                              │
 │  • 중소 규모 (일일 1000만 추론 이하)                              │
@@ -1313,6 +1280,56 @@ span.end() → atomic CAS → buffer[idx] = span
 | Query Latency (P95) | < 500ms | 대시보드 응답 시간 |
 | Data Loss | 0% (정상 운영) | E2E 테스트 |
 | Setup Time | < 30분 | 문서 따라 설치 |
+
+### 8.4 Known Limitations (MVP)
+
+MVP에서 의도적으로 미해결로 남겨둔 사항들입니다. 구현 진행하면서 구체화합니다.
+
+#### 1. SDK 오버헤드 목표 검증 필요
+```
+목표: < 1μs (추론 스레드 영향)
+예상: Python 구현 시 10-50μs 가능성
+조치: 구현 후 벤치마크로 측정, 필요시 Cython/C extension 검토
+```
+
+#### 2. GPU Array 컬럼 쿼리 성능
+```
+현재: spans 테이블에 GPU 정보를 Array로 저장
+문제: GPU별 집계 쿼리 시 ARRAY JOIN 필요 (비용 높음)
+조치: MVP 규모에서 모니터링, 병목 발생 시 별도 테이블로 분리
+```
+
+#### 3. 보안 정책 미정의
+```
+미정의 항목:
+- SDK ↔ Server 인증 방식 (API Key, mTLS 등)
+- TLS 설정
+- 민감 데이터 (Prompt 내용 등) 처리 정책
+- Multi-tenant 데이터 격리
+
+조치: MVP는 내부망/신뢰 환경 가정, v0.2에서 보안 레이어 추가
+```
+
+#### 4. 비용 계산 정책 미정의
+```
+미정의 항목:
+- MIG 인스턴스 비용 분배 (메모리 비율? SM 비율?)
+- 여러 Span이 동시에 GPU 사용 시 비용 분배
+- Idle 시간 비용 처리
+
+조치: cost_usd 필드는 Optional, 정책 정의 후 구현
+```
+
+#### 5. Queue 모니터링 미지원
+```
+현재: E2E duration만 측정, Queue 대기 시간 별도 측정 안 함
+이유:
+- 회사마다 Queue 시스템이 다름 (Kafka, Redis, Celery 등)
+- 범용 표준화 어려움
+
+조치: v0.2+에서 인기 Queue 시스템별 Integration 제공 검토
+      (Celery, Redis Queue 등)
+```
 
 ---
 

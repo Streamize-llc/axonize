@@ -1,0 +1,67 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${CLICKHOUSE_PORT:-9000}:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DATABASE:-axonize}
+    networks:
+      - axonize-net
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${POSTGRES_DATABASE:-axonize}
+      POSTGRES_USER: ${POSTGRES_USER:-axonize}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-axonize}
+    networks:
+      - axonize-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-axonize}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  axonize-server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "${AXONIZE_GRPC_PORT:-4317}:4317"
+      - "${AXONIZE_HTTP_PORT:-8080}:8080"
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 9000
+      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-axonize}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:-axonize}
+      POSTGRES_USER: ${POSTGRES_USER:-axonize}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-axonize}
+    networks:
+      - axonize-net
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+volumes:
+  clickhouse-data:
+  postgres-data:
+
+networks:
+  axonize-net:
+    driver: bridge
