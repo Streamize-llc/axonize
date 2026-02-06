@@ -1,0 +1,17 @@
+server:
+  grpc_port: 4317
+  http_port: 8080
+
+clickhouse:
+  host: localhost
+  port: 9000
+  database: axonize
+  user: default
+  password: ""
+
+postgresql:
+  host: localhost
+  port: 5432
+  database: axonize
+  user: axonize
+  password: axonize
