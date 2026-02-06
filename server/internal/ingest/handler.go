@@ -289,6 +289,9 @@ func parseGPUAttributes(attrs map[string]*commonpb.AnyValue, record *store.SpanR
 		if v, ok := attrs[p+".model"]; ok {
 			record.GpuModels = append(record.GpuModels, v.GetStringValue())
 		}
+		if v, ok := attrs[p+".vendor"]; ok {
+			record.GpuVendors = append(record.GpuVendors, v.GetStringValue())
+		}
 		if v, ok := attrs[p+".node_id"]; ok {
 			record.GpuNodeIDs = append(record.GpuNodeIDs, v.GetStringValue())
 		}
@@ -372,8 +375,11 @@ func (h *Handler) registerGPUs(ctx context.Context, batch []store.SpanRecord) {
 				memTotalGB = span.GpuMemoryTotalGB[i]
 			}
 
-			// Derive vendor from model name
+			// Use vendor from SDK attributes; fall back to "NVIDIA" for older SDKs
 			vendor := "NVIDIA"
+			if i < len(span.GpuVendors) && span.GpuVendors[i] != "" {
+				vendor = span.GpuVendors[i]
+			}
 
 			if err := h.registrar.UpsertPhysicalGPU(ctx, store.PhysicalGPURecord{
 				UUID:          physicalUUID,

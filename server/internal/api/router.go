@@ -7,6 +7,7 @@ type Store interface {
 	Pinger
 	TraceQuerier
 	GPUMetricQuerier
+	AnalyticsQuerier
 }
 
 // GPUStore combines GPU registry query interfaces (PostgreSQL).
@@ -30,6 +31,9 @@ func NewRouter(s Store, gpuStore GPUStore) http.Handler {
 	mux.HandleFunc("GET /api/v1/gpus", handleListGPUs(gpuStore))
 	mux.HandleFunc("GET /api/v1/gpus/{uuid}", handleGetGPU(gpuStore))
 	mux.HandleFunc("GET /api/v1/gpus/{uuid}/metrics", handleGetGPUMetrics(s))
+
+	// Analytics
+	mux.HandleFunc("GET /api/v1/analytics/overview", handleAnalyticsOverview(s))
 
 	return corsMiddleware(mux)
 }

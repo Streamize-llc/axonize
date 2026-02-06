@@ -1,4 +1,4 @@
-.PHONY: dev dev-all test test-sdk test-server lint lint-sdk lint-server build clean migrate test-e2e test-load
+.PHONY: dev dev-all test test-sdk test-server lint lint-sdk lint-server build build-dashboard clean migrate test-e2e test-load dev-dashboard
 
 # Development
 dev:
@@ -33,8 +33,15 @@ lint-server:
 	cd server && go vet ./...
 
 # Build
-build:
+build: build-dashboard
 	docker build -t axonize-server ./server
+
+build-dashboard:
+	cd dashboard && npm run build
+
+# Dashboard dev server
+dev-dashboard:
+	cd dashboard && npm run dev
 
 # Database
 migrate:

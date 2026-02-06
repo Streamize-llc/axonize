@@ -208,6 +208,88 @@ func (s *ClickHouseStore) QueryGPUMetrics(ctx context.Context, uuid string, star
 	return metrics, nil
 }
 
+// QueryAnalyticsOverview returns aggregated analytics for the dashboard overview.
+func (s *ClickHouseStore) QueryAnalyticsOverview(ctx context.Context, start, end time.Time) (*AnalyticsOverview, error) {
+	overview := &AnalyticsOverview{}
+
+	// 1. Summary stats
+	err := s.conn.QueryRow(ctx, `
+		SELECT
+			count(DISTINCT trace_id) AS total_traces,
+			avg(duration_ms) AS avg_latency_ms,
+			countIf(status = 'error') / greatest(count(), 1) AS error_rate,
+			count(DISTINCT arrayJoin(gpu_resource_uuids)) AS active_gpu_count
+		FROM spans
+		WHERE start_time >= ? AND start_time <= ?
+	`, start, end).Scan(
+		&overview.TotalTraces,
+		&overview.AvgLatencyMs,
+		&overview.ErrorRate,
+		&overview.ActiveGPUCount,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("analytics summary: %w", err)
+	}
+
+	// 2. Throughput series (per hour buckets)
+	rows, err := s.conn.Query(ctx, `
+		SELECT
+			toStartOfHour(start_time) AS bucket,
+			count(DISTINCT trace_id) AS cnt
+		FROM spans
+		WHERE start_time >= ? AND start_time <= ?
+		GROUP BY bucket
+		ORDER BY bucket ASC
+	`, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("analytics throughput: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var pt ThroughputPoint
+		if err := rows.Scan(&pt.Timestamp, &pt.Count); err != nil {
+			return nil, fmt.Errorf("scan throughput: %w", err)
+		}
+		overview.ThroughputSeries = append(overview.ThroughputSeries, pt)
+	}
+
+	// 3. Latency percentiles series (per hour buckets)
+	rows2, err := s.conn.Query(ctx, `
+		SELECT
+			toStartOfHour(start_time) AS bucket,
+			quantile(0.5)(duration_ms) AS p50,
+			quantile(0.95)(duration_ms) AS p95,
+			quantile(0.99)(duration_ms) AS p99
+		FROM spans
+		WHERE start_time >= ? AND start_time <= ?
+		GROUP BY bucket
+		ORDER BY bucket ASC
+	`, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("analytics latency: %w", err)
+	}
+	defer rows2.Close()
+
+	for rows2.Next() {
+		var pt LatencyPoint
+		if err := rows2.Scan(&pt.Timestamp, &pt.P50Ms, &pt.P95Ms, &pt.P99Ms); err != nil {
+			return nil, fmt.Errorf("scan latency: %w", err)
+		}
+		overview.LatencySeries = append(overview.LatencySeries, pt)
+	}
+
+	// Ensure non-nil slices for JSON
+	if overview.ThroughputSeries == nil {
+		overview.ThroughputSeries = []ThroughputPoint{}
+	}
+	if overview.LatencySeries == nil {
+		overview.LatencySeries = []LatencyPoint{}
+	}
+
+	return overview, nil
+}
+
 // QueryTraces returns a paginated list of trace summaries.
 func (s *ClickHouseStore) QueryTraces(ctx context.Context, f TraceFilter) ([]TraceSummary, int, error) {
 	// Build WHERE clause

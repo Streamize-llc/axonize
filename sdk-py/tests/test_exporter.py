@@ -55,6 +55,7 @@ def _make_gpu_attribution(**overrides: object) -> GPUAttribution:
         "resource_uuid": "GPU-0000",
         "physical_gpu_uuid": "GPU-0000",
         "gpu_model": "NVIDIA H100 80GB HBM3",
+        "vendor": "NVIDIA",
         "node_id": "worker-01",
         "resource_type": "full_gpu",
         "user_label": "cuda:0",
@@ -180,6 +181,7 @@ class TestSpanDataToOtlp:
         assert attr_dict["gpu.0.resource_uuid"].string_value == "GPU-0000"
         assert attr_dict["gpu.0.physical_uuid"].string_value == "GPU-0000"
         assert attr_dict["gpu.0.model"].string_value == "NVIDIA H100 80GB HBM3"
+        assert attr_dict["gpu.0.vendor"].string_value == "NVIDIA"
         assert attr_dict["gpu.0.node_id"].string_value == "worker-01"
         assert attr_dict["gpu.0.resource_type"].string_value == "full_gpu"
         assert attr_dict["gpu.0.user_label"].string_value == "cuda:0"

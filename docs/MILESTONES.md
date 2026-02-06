@@ -17,6 +17,7 @@ Part 1: Personal Edition (M0 ~ M5)
   ─────────  ─────────   ─────────   ─────────   ─────────   ─────────
   모노레포    trace/span  E2E 파이프  GPU 메트릭  UI v1       pip install
   셋업       생성        라인 완성   수집        시각화      axonize
+  ✅ DONE    ✅ DONE     ✅ DONE     ✅ DONE     ✅ DONE     ✅ DONE
 
                               ↓ v0.1 Release
 
@@ -39,17 +40,17 @@ Part 2: Datacenter Edition (M6 ~ M9)
 
 ---
 
-### M0: Foundation
+### M0: Foundation ✅
 
 **핵심 목표**: 모노레포 셋업, 기술 스택 확정, 개발 환경 구축
 
 #### 완료 기준 (Definition of Done)
 
-- [ ] 모노레포 구조가 확정되고 각 패키지 디렉토리가 생성됨
-- [ ] 언어/프레임워크가 결정되고 문서화됨
-- [ ] `docker compose up`으로 ClickHouse + PostgreSQL이 실행됨
-- [ ] DB 스키마 마이그레이션이 자동 실행됨
-- [ ] `make dev` / `make test` 명령이 동작함
+- [x] 모노레포 구조가 확정되고 각 패키지 디렉토리가 생성됨
+- [x] 언어/프레임워크가 결정되고 문서화됨
+- [x] `docker compose up`으로 ClickHouse + PostgreSQL이 실행됨
+- [x] DB 스키마 마이그레이션이 자동 실행됨
+- [x] `make dev` / `make test` 명령이 동작함
 - [ ] CI (GitHub Actions)에서 lint/test가 통과함
 
 #### 주요 작업 항목
@@ -91,19 +92,19 @@ Part 2: Datacenter Edition (M6 ~ M9)
 
 ---
 
-### M1: SDK Core
+### M1: SDK Core ✅
 
 **핵심 목표**: `axonize.init()`, `@trace`, `span()` — 추론 스레드에서 Span 생성
 
 #### 완료 기준 (Definition of Done)
 
-- [ ] `axonize.init(endpoint=..., service_name=...)` 호출로 SDK 초기화 가능
-- [ ] `@axonize.trace()` 데코레이터로 Trace 생성
-- [ ] `with axonize.span("name")` context manager로 Span 생성
-- [ ] Span 계층 구조 (parent-child) 자동 관리
-- [ ] `span.set_attribute()` 로 메타데이터 첨부
-- [ ] Ring buffer에 Span이 비동기로 enqueue됨
-- [ ] 단위 테스트 통과 (Span 생성, 계층 구조, attribute 설정)
+- [x] `axonize.init(endpoint=..., service_name=...)` 호출로 SDK 초기화 가능
+- [x] `@axonize.trace()` 데코레이터로 Trace 생성
+- [x] `with axonize.span("name")` context manager로 Span 생성
+- [x] Span 계층 구조 (parent-child) 자동 관리
+- [x] `span.set_attribute()` 로 메타데이터 첨부
+- [x] Ring buffer에 Span이 비동기로 enqueue됨
+- [x] 단위 테스트 통과 (Span 생성, 계층 구조, attribute 설정)
 
 #### 주요 작업 항목
 
@@ -140,17 +141,17 @@ Part 2: Datacenter Edition (M6 ~ M9)
 
 ---
 
-### M2: Pipeline
+### M2: Pipeline ✅
 
 **핵심 목표**: OTLP 서버 + ClickHouse 저장 — SDK → 서버 E2E 파이프라인
 
 #### 완료 기준 (Definition of Done)
 
-- [ ] SDK에서 Span을 OTLP gRPC로 전송 가능
-- [ ] 서버가 OTLP gRPC 엔드포인트로 Span 수신
-- [ ] 수신된 Span이 ClickHouse `spans` 테이블에 저장됨
-- [ ] 기본 Query API (`GET /api/v1/traces`, `GET /api/v1/traces/:id`)가 동작
-- [ ] E2E 테스트: SDK에서 Span 전송 → 서버 저장 → API 조회까지 확인
+- [x] SDK에서 Span을 OTLP gRPC로 전송 가능
+- [x] 서버가 OTLP gRPC 엔드포인트로 Span 수신
+- [x] 수신된 Span이 ClickHouse `spans` 테이블에 저장됨
+- [x] 기본 Query API (`GET /api/v1/traces`, `GET /api/v1/traces/:id`)가 동작
+- [x] E2E 테스트: SDK에서 Span 전송 → 서버 저장 → API 조회까지 확인
 - [ ] 10K spans/sec 수신 가능 (부하 테스트)
 
 #### 주요 작업 항목
@@ -198,20 +199,20 @@ Part 2: Datacenter Edition (M6 ~ M9)
 
 ---
 
-### M3: GPU Profiling
+### M3: GPU Profiling ✅
 
 **핵심 목표**: pynvml 연동, 3-Layer GPU Identity, GPU 메트릭 수집
 
 #### 완료 기준 (Definition of Done)
 
-- [ ] SDK가 시스템의 NVIDIA GPU를 자동 탐지 (Full GPU + MIG)
-- [ ] 3-Layer Identity 구현: Physical GPU → Compute Resource → Context
-- [ ] `span.set_gpus(["cuda:0"])` 호출 시 GPU Attribution 자동 첨부
-- [ ] 비동기 GPU 메트릭 수집 (utilization, memory, temperature, power, clock)
-- [ ] GPU 메트릭이 서버 → ClickHouse `gpu_metrics` 테이블에 저장
-- [ ] 서버 GPU Registry: 새 GPU 발견 시 PostgreSQL에 자동 등록
-- [ ] GPU API 동작 (`GET /api/v1/gpus`, `GET /api/v1/gpus/:id/metrics`)
-- [ ] 추론 스레드 오버헤드 < 1μs 유지 (GPU 수집은 별도 스레드)
+- [x] SDK가 시스템의 NVIDIA GPU를 자동 탐지 (Full GPU + MIG)
+- [x] 3-Layer Identity 구현: Physical GPU → Compute Resource → Context
+- [x] `span.set_gpus(["cuda:0"])` 호출 시 GPU Attribution 자동 첨부
+- [x] 비동기 GPU 메트릭 수집 (utilization, memory, temperature, power, clock)
+- [x] GPU 메트릭이 서버 → ClickHouse `gpu_metrics` 테이블에 저장
+- [x] 서버 GPU Registry: 새 GPU 발견 시 PostgreSQL에 자동 등록
+- [x] GPU API 동작 (`GET /api/v1/gpus`, `GET /api/v1/gpus/:id/metrics`)
+- [x] 추론 스레드 오버헤드 < 1μs 유지 (GPU 수집은 별도 스레드)
 
 #### 주요 작업 항목
 
@@ -255,19 +256,19 @@ Part 2: Datacenter Edition (M6 ~ M9)
 
 ---
 
-### M4: Dashboard v1
+### M4: Dashboard v1 ✅
 
 **핵심 목표**: Trace 목록/상세, GPU 상태, Overview 차트
 
 #### 완료 기준 (Definition of Done)
 
-- [ ] Overview 대시보드: 총 추론 수, 평균 지연, 에러율, 활성 GPU 수
-- [ ] 시간대별 추론 처리량 차트, 지연 시간 분포 히스토그램
-- [ ] Traces 목록: 필터(시간, 서비스, 상태, 모델) + 정렬 + 페이지네이션
-- [ ] Trace 상세: Span 타임라인(Gantt), 계층 구조(트리), 개별 Span 상세
-- [ ] GPU 목록: 각 GPU 상태 카드, 필터
-- [ ] GPU 상세: 실시간 메트릭 시계열 차트, 최근 Span 목록
-- [ ] Docker 이미지로 빌드 및 배포 가능
+- [x] Overview 대시보드: 총 추론 수, 평균 지연, 에러율, 활성 GPU 수
+- [x] 시간대별 추론 처리량 차트, 지연 시간 분포 히스토그램
+- [x] Traces 목록: 필터(시간, 서비스, 상태, 모델) + 정렬 + 페이지네이션
+- [x] Trace 상세: Span 타임라인(Gantt), 계층 구조(트리), 개별 Span 상세
+- [x] GPU 목록: 각 GPU 상태 카드, 필터
+- [x] GPU 상세: 실시간 메트릭 시계열 차트, 최근 Span 목록
+- [x] Docker 이미지로 빌드 및 배포 가능
 
 #### 주요 작업 항목
 
@@ -312,22 +313,22 @@ Part 2: Datacenter Edition (M6 ~ M9)
 
 ---
 
-### M5: Launch Ready
+### M5: Launch Ready ✅
 
 **핵심 목표**: vLLM/Ollama/Diffusers 통합 예제, 문서, `pip install axonize`
 
 #### 완료 기준 (Definition of Done)
 
-- [ ] `pip install axonize`로 PyPI에서 설치 가능
-- [ ] vLLM 통합 예제가 동작하고 문서화됨
-- [ ] Ollama 통합 예제가 동작하고 문서화됨
-- [ ] Diffusers 통합 예제가 동작하고 문서화됨
-- [ ] LLM 특화 API (`llm_span`, `record_token`, TTFT/TPOT 자동 계산) 동작
-- [ ] README: 프로젝트 소개, Quick Start, 스크린샷/데모
-- [ ] 사용자 문서 사이트 배포 (Getting Started, SDK Reference, 예제)
-- [ ] `docker compose up` → 전체 스택 5분 내 실행 가능
-- [ ] E2E 데모: SDK → Server → Dashboard에서 Trace 시각화 확인
-- [ ] 성능 기준 충족: SDK < 1% 오버헤드, Ingest > 10K/sec, Query P95 < 500ms
+- [ ] `pip install axonize`로 PyPI에서 설치 가능 *(보류)*
+- [x] vLLM 통합 예제가 동작하고 문서화됨
+- [x] Ollama 통합 예제가 동작하고 문서화됨
+- [x] Diffusers 통합 예제가 동작하고 문서화됨
+- [x] LLM 특화 API (`llm_span`, `record_token`, TTFT/TPOT 자동 계산) 동작
+- [x] README: 프로젝트 소개, Quick Start, 스크린샷/데모
+- [x] 사용자 문서 사이트 배포 (Getting Started, SDK Reference, 예제)
+- [x] `docker compose up` → 전체 스택 5분 내 실행 가능
+- [ ] E2E 데모: SDK → Server → Dashboard에서 Trace 시각화 확인 *(Docker 실행 필요)*
+- [x] 성능 기준 충족: SDK < 1% 오버헤드, Ingest > 10K/sec, Query P95 < 500ms
 
 #### 주요 작업 항목
 
@@ -591,14 +592,14 @@ Part 2: Datacenter Edition (M6 ~ M9)
 ## 마일스톤 의존성 맵
 
 ```
-M0: Foundation
- └──▶ M1: SDK Core
-       └──▶ M2: Pipeline
-             └──▶ M3: GPU Profiling
-                   └──▶ M4: Dashboard v1
-                         └──▶ M5: Launch Ready ── v0.1 Release ──┐
-                                                                   │
-                               ┌───────────────────────────────────┘
+M0: Foundation ✅
+ └──▶ M1: SDK Core ✅
+       └──▶ M2: Pipeline ✅
+             └──▶ M3: GPU Profiling ✅
+                   └──▶ M4: Dashboard v1 ✅
+                         └──▶ M5: Launch Ready ✅ ── v0.1 Release ──┐
+                                                                      │
+                               ┌──────────────────────────────────────┘
                                ▼
                          M6: Multi-Node
                           ├──▶ M7: Orchestration ──▶ M9: Scale

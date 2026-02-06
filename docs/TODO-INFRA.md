@@ -7,19 +7,19 @@
 ## 1. 데이터베이스 스키마
 
 ### 1.1 ClickHouse
-- [ ] spans 테이블 생성 스크립트
-- [ ] traces 테이블 생성 스크립트
-- [ ] gpu_metrics 테이블 생성 스크립트
-- [ ] 인덱스 설정
-- [ ] TTL 설정 (spans: 30일, traces: 90일, gpu_metrics: 7일)
-- [ ] 마이그레이션 스크립트 관리 방안
+- [x] spans 테이블 생성 스크립트
+- [x] traces 테이블 생성 스크립트
+- [x] gpu_metrics 테이블 생성 스크립트
+- [x] 인덱스 설정
+- [x] TTL 설정 (spans: 30일, traces: 90일, gpu_metrics: 7일)
+- [x] 마이그레이션 스크립트 관리 방안
 
 ### 1.2 PostgreSQL
-- [ ] physical_gpus 테이블 생성 스크립트
-- [ ] compute_resources 테이블 생성 스크립트
-- [ ] resource_contexts 테이블 생성 스크립트
-- [ ] 인덱스 설정 (labels JSONB GIN 인덱스)
-- [ ] 마이그레이션 도구 선택 (Flyway, golang-migrate 등)
+- [x] physical_gpus 테이블 생성 스크립트
+- [x] compute_resources 테이블 생성 스크립트
+- [x] resource_contexts 테이블 생성 스크립트
+- [x] 인덱스 설정 (labels JSONB GIN 인덱스)
+- [x] 마이그레이션 도구 선택 (Flyway, golang-migrate 등)
 
 ---
 
@@ -27,42 +27,42 @@
 
 ### 2.1 개별 이미지
 - [ ] SDK 테스트용 Python 이미지
-- [ ] Server 이미지 (멀티스테이지 빌드)
-- [ ] Dashboard 이미지 (nginx + static)
+- [x] Server 이미지 (멀티스테이지 빌드)
+- [x] Dashboard 이미지 (nginx + static)
 
 ### 2.2 Docker Compose (개발용)
-- [ ] docker-compose.yml 작성
-  - [ ] ClickHouse 서비스
-  - [ ] PostgreSQL 서비스
+- [x] docker-compose.yml 작성
+  - [x] ClickHouse 서비스
+  - [x] PostgreSQL 서비스
   - [ ] Redis 서비스 (선택)
-  - [ ] Server 서비스
-  - [ ] Dashboard 서비스
-- [ ] 볼륨 설정 (데이터 영속성)
-- [ ] 네트워크 설정
-- [ ] 환경변수 파일 (.env.example)
+  - [x] Server 서비스
+  - [x] Dashboard 서비스
+- [x] 볼륨 설정 (데이터 영속성)
+- [x] 네트워크 설정
+- [x] 환경변수 파일 (.env.example)
 
 ### 2.3 Docker Compose (프로덕션)
-- [ ] 리소스 제한 설정
-- [ ] 헬스체크 설정
+- [x] 리소스 제한 설정
+- [x] 헬스체크 설정
 - [ ] 로그 드라이버 설정
 
 ---
 
 ## 3. 로컬 개발 환경
 
-- [ ] Makefile 또는 Taskfile
-  - [ ] `make dev` - 전체 스택 실행
-  - [ ] `make test` - 테스트 실행
-  - [ ] `make build` - 이미지 빌드
-  - [ ] `make clean` - 정리
-- [ ] 로컬 ClickHouse/PostgreSQL 실행 스크립트
+- [x] Makefile 또는 Taskfile
+  - [x] `make dev` - 전체 스택 실행
+  - [x] `make test` - 테스트 실행
+  - [x] `make build` - 이미지 빌드
+  - [x] `make clean` - 정리
+- [x] 로컬 ClickHouse/PostgreSQL 실행 스크립트
 - [ ] 샘플 데이터 시드 스크립트
 
 ---
 
 ## 4. 설정 관리
 
-- [ ] 서버 설정 파일 구조 (config.yaml)
+- [x] 서버 설정 파일 구조 (config.yaml)
   ```yaml
   server:
     port: 4317
@@ -73,8 +73,8 @@
     host: localhost
     port: 5432
   ```
-- [ ] 환경변수 오버라이드
-- [ ] 설정 검증
+- [x] 환경변수 오버라이드
+- [x] 설정 검증
 
 ---
 

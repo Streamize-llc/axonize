@@ -10,25 +10,29 @@ Axonize is an observability platform for AI inference workloads. It sits between
 
 ### Development
 ```bash
-make dev          # Start ClickHouse + PostgreSQL containers
-make migrate      # Apply DB migrations (requires clickhouse-client + psql)
-make clean        # Stop containers, remove volumes and build artifacts
+make dev              # Start ClickHouse + PostgreSQL containers only
+make dev-all          # Start all services (DBs + server + dashboard)
+make migrate          # Apply DB migrations (requires clickhouse-client + psql)
+make clean            # Stop containers, remove volumes and build artifacts
+make dev-dashboard    # Start dashboard dev server (hot-reload)
 ```
 
 ### Testing
 ```bash
-make test         # Run all tests (SDK + server)
-make test-sdk     # cd sdk-py && uv run pytest
-make test-server  # cd server && go test ./...
+make test             # Run all tests (SDK + server)
+make test-sdk         # cd sdk-py && uv run pytest
+make test-server      # cd server && go test ./...
+make test-e2e         # E2E tests (requires make dev-all + make migrate first)
+make test-load        # Load tests
 ```
 
-Single test: `cd sdk-py && uv run pytest tests/test_specific.py::test_name -v`
+Single test: `cd sdk-py && uv run pytest tests/test_specific.py::TestClass::test_name -v`
 
 ### Linting
 ```bash
-make lint         # Run all linters
-make lint-sdk     # ruff check + mypy (sdk-py)
-make lint-server  # go vet (server)
+make lint             # Run all linters
+make lint-sdk         # ruff check + mypy (sdk-py)
+make lint-server      # go vet (server)
 ```
 
 ### Python SDK setup
@@ -39,37 +43,57 @@ Must use native Python — the uv-installed `python3.13` is a wasm32/emscripten 
 
 ## Architecture
 
-### Monorepo layout
-- `sdk-py/` — Python SDK (hatchling build, uv package manager)
-- `server/` — Go server (go 1.23, yaml.v3 config)
-- `dashboard/` — React frontend (placeholder, M4)
-- `migrations/` — Raw SQL for ClickHouse and PostgreSQL
-
 ### Data flow
+```
 SDK (Python) → gRPC (OTLP) → Server (Go) → ClickHouse (spans/metrics) + PostgreSQL (GPU registry)
+                                          → REST API → Dashboard (React)
+```
+
+### SDK internal pipeline
+Spans flow through a 4-stage pipeline, all designed for < 1μs inference thread overhead:
+1. **Span** (`_span.py`, `_llm.py`) — Context manager collects attributes; parent-child linking via `contextvars` (`_context.py`)
+2. **RingBuffer** (`_buffer.py`) — Lock-free `deque`-based buffer; span data written on `__exit__`
+3. **BackgroundProcessor** (`_processor.py`) — Daemon thread drains buffer at `flush_interval_ms` intervals
+4. **OTLPExporter** (`_exporter.py`) — Converts `SpanData` to OTel protobuf, ships via gRPC
+
+GPU metrics are collected in a separate daemon thread by `GPUProfiler` and attached at span exit via `set_gpus()`.
+
+### GPU backend architecture
+- `_gpu_backend.py` — `GPUBackend` Protocol + `DiscoveredGPU` dataclass (the only shared dependency)
+- `_gpu_nvml.py` — NVIDIA backend (pynvml, optional via `axonize[nvidia]`)
+- `_gpu_apple.py` — Apple Silicon backend (IOKit via ctypes, auto-detected on macOS ARM64)
+- `_gpu.py` — `GPUProfiler` (backend-agnostic), `MockGPUProfiler`, factory `create_gpu_profiler()`
+- Factory auto-selects: NVIDIA → Apple Silicon → None (graceful degradation)
+- `gpu.N.vendor` OTLP attribute carries vendor info SDK→Server
+
+### Server structure
+- `internal/ingest/handler.go` — OTLP gRPC handler: parses protobuf spans, extracts GPU attributes (`gpu.N.*`), batches to ClickHouse, upserts GPU registry to PostgreSQL
+- `internal/store/` — ClickHouse (time-series spans + gpu_metrics) and PostgreSQL (GPU registry) stores
+- `internal/api/` — REST endpoints for traces, GPUs, analytics
+- `internal/config/` — YAML config with env var overrides (`AXONIZE_CONFIG` or default `config.yaml`)
 
 ### Databases
-- **ClickHouse**: Time-series data — `spans`, `traces`, `gpu_metrics` tables. Partitioned by day, TTL 7-90 days.
-- **PostgreSQL**: GPU registry — `physical_gpus`, `compute_resources`, `resource_contexts` tables with a 3-layer identity model.
+- **ClickHouse**: `spans`, `gpu_metrics` tables. Partitioned by day, TTL 7-90 days.
+- **PostgreSQL**: 3-layer GPU identity model:
+  1. `physical_gpus` — Immutable hardware (UUID, model, vendor, node)
+  2. `compute_resources` — Logical unit (full GPU or MIG instance)
+  3. `resource_contexts` — Runtime labels ("cuda:0", pod/container info)
 
-### 3-Layer GPU Identity Model
-1. **Physical** (`physical_gpus`): Immutable hardware — GPU UUID, model, node location
-2. **Resource** (`compute_resources`): Logical compute unit (PK) — full GPU or MIG instance
-3. **Context** (`resource_contexts`): Runtime mapping — user labels like "cuda:0", pod/container info
+This disambiguates MIG environments where every pod sees "cuda:0".
 
-This design allows MIG environments where every pod sees "cuda:0" to be disambiguated at every layer.
-
-### Server config loading
-`server/internal/config/config.go` loads config from YAML file (default `config.yaml`, override with `AXONIZE_CONFIG` env var), then applies environment variable overrides. All env vars match `.env.example`.
-
-### SDK design constraints
-- Inference thread overhead target: < 1μs (lock-free ring buffer, async GPU profiling)
-- OpenTelemetry compatible — uses OTel semantic conventions with `ai.*`, `gpu.*`, `cost.*` attribute prefixes
-- Graceful degradation — inference must not be affected by tracing failures
+### Docker services
+- `clickhouse` — ports 8123 (HTTP), 9000 (native)
+- `postgres` — port 5432
+- `axonize-server` — gRPC :4317, HTTP :8080
+- `dashboard` — port 3000
 
 ## Key Conventions
 
 - `ARCHITECTURE.md` is the single source of truth for schemas and data model decisions
 - DB schema in `migrations/` must match ARCHITECTURE.md §6.2 (ClickHouse) and §6.3 (PostgreSQL)
+- Conventional commits: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`
+- Python: `from __future__ import annotations` in all files; ruff line-length 100; mypy strict
 - Python SDK pins `mypy>=1.10,<1.19` to avoid `librt` build failures on macOS
+- Go: `log/slog` for structured logging; context-first function signatures; `fmt.Errorf("...: %w", err)` for error wrapping
 - Go is not installed in the local dev environment — Go validation happens in CI
+- Inference must never be affected by tracing failures — all exporter/GPU errors are swallowed with debug logging

@@ -29,6 +29,7 @@ class GPUAttribution:
     resource_uuid: str
     physical_gpu_uuid: str
     gpu_model: str
+    vendor: str
     node_id: str
     resource_type: str
     user_label: str

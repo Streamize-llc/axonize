@@ -110,10 +110,13 @@ class TestMockProfilerLifecycle:
 
 
 class TestGracefulDegradation:
-    def test_create_profiler_no_pynvml(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import axonize._gpu as gpu_mod
+    def test_create_profiler_no_backends(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When all backends fail, create_gpu_profiler returns None."""
+        import axonize._gpu_nvml as nvml_mod
 
-        monkeypatch.setattr(gpu_mod, "_HAS_PYNVML", False)
+        monkeypatch.setattr(nvml_mod, "_HAS_PYNVML", False)
+        # Also block Apple Silicon backend by pretending we're not on Darwin
+        monkeypatch.setattr("axonize._gpu.sys", type("FakeSys", (), {"platform": "linux"})())
         result = create_gpu_profiler()
         assert result is None
 

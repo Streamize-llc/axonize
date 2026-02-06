@@ -8,6 +8,7 @@ from axonize._buffer import RingBuffer
 from axonize._config import AxonizeConfig
 from axonize._exporter import OTLPExporter
 from axonize._gpu import GPUProfiler, MockGPUProfiler, create_gpu_profiler
+from axonize._llm import LLMSpan
 from axonize._processor import BackgroundProcessor
 from axonize._span import Span
 from axonize._types import SpanKind
@@ -77,6 +78,27 @@ class _AxonizeSDK:
             environment=self.config.environment,
         )
 
+    def create_llm_span(
+        self,
+        name: str,
+        *,
+        model: str | None = None,
+        model_version: str | None = None,
+        inference_type: str = "llm",
+        kind: SpanKind = SpanKind.SERVER,
+    ) -> LLMSpan:
+        """Create an LLM-specialized span wired to the internal buffer."""
+        return LLMSpan(
+            name,
+            buffer=self._buffer,
+            kind=kind,
+            service_name=self.config.service_name,
+            environment=self.config.environment,
+            model=model,
+            model_version=model_version,
+            inference_type=inference_type,
+        )
+
 
 class _NoopSDK:
     """Fallback used when SDK is not initialized. Spans are silently discarded."""
@@ -88,6 +110,18 @@ class _NoopSDK:
         kind: SpanKind = SpanKind.INTERNAL,
     ) -> Span:
         return Span(name, buffer=None, kind=kind)
+
+    def create_llm_span(
+        self,
+        name: str,
+        *,
+        model: str | None = None,
+        model_version: str | None = None,
+        inference_type: str = "llm",
+        kind: SpanKind = SpanKind.SERVER,
+    ) -> LLMSpan:
+        return LLMSpan(name, buffer=None, kind=kind, model=model,
+                       model_version=model_version, inference_type=inference_type)
 
 
 _noop = _NoopSDK()

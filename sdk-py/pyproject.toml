@@ -9,10 +9,13 @@ description = "Observability SDK for AI inference workloads"
 requires-python = ">=3.10"
 dependencies = [
     "opentelemetry-proto>=1.20",
-    "pynvml>=11.5",
     "grpcio>=1.60",
     "protobuf>=4.21",
 ]
+
+[project.optional-dependencies]
+nvidia = ["pynvml>=11.5"]
+all = ["pynvml>=11.5"]
 
 [dependency-groups]
 dev = [

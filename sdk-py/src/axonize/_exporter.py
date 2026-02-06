@@ -72,6 +72,7 @@ def _span_data_to_otlp(sd: SpanData) -> OtlpSpan:
             _make_attribute(f"{p}.resource_uuid", ga.resource_uuid),
             _make_attribute(f"{p}.physical_uuid", ga.physical_gpu_uuid),
             _make_attribute(f"{p}.model", ga.gpu_model),
+            _make_attribute(f"{p}.vendor", ga.vendor),
             _make_attribute(f"{p}.node_id", ga.node_id),
             _make_attribute(f"{p}.resource_type", ga.resource_type),
             _make_attribute(f"{p}.user_label", ga.user_label),

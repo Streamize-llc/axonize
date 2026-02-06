@@ -31,6 +31,7 @@ type SpanRecord struct {
 	GpuResourceUUIDs    []string
 	GpuPhysicalUUIDs    []string
 	GpuModels           []string
+	GpuVendors          []string
 	GpuNodeIDs          []string
 	GpuResourceTypes    []string
 	GpuUserLabels       []string
@@ -151,4 +152,28 @@ type GPUMetricRow struct {
 	Utilization  float32   `json:"utilization"`
 	MemoryUsedGB float32   `json:"memory_used_gb"`
 	PowerWatts   uint16    `json:"power_watts"`
+}
+
+// AnalyticsOverview is the overview response for the dashboard.
+type AnalyticsOverview struct {
+	TotalTraces      int                `json:"total_traces"`
+	AvgLatencyMs     float64            `json:"avg_latency_ms"`
+	ErrorRate        float64            `json:"error_rate"`
+	ActiveGPUCount   int                `json:"active_gpu_count"`
+	ThroughputSeries []ThroughputPoint  `json:"throughput_series"`
+	LatencySeries    []LatencyPoint     `json:"latency_series"`
+}
+
+// ThroughputPoint is a single point in the throughput time series.
+type ThroughputPoint struct {
+	Timestamp time.Time `json:"timestamp"`
+	Count     int       `json:"count"`
+}
+
+// LatencyPoint is a single point in the latency percentile time series.
+type LatencyPoint struct {
+	Timestamp time.Time `json:"timestamp"`
+	P50Ms     float64   `json:"p50_ms"`
+	P95Ms     float64   `json:"p95_ms"`
+	P99Ms     float64   `json:"p99_ms"`
 }

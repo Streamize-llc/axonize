@@ -147,7 +147,7 @@ Request ──→ VIT Embedding ──→ Diffusion (20 steps) ──→ VAE Dec
 
 | Component | Responsibility | Technology |
 |-----------|---------------|------------|
-| **axonize-py** | Python SDK, 메트릭 수집 및 전송 | Python, pynvml, OTel SDK |
+| **axonize-py** | Python SDK, 메트릭 수집 및 전송 | Python, pynvml/IOKit, OTel SDK |
 | **OTLP Server** | Span 수신, 검증, 저장 | Go or Rust, gRPC |
 | **GPU Registry** | GPU 디바이스 정보 관리 | PostgreSQL |
 | **ClickHouse** | 시계열 Span 데이터 저장 | ClickHouse |
@@ -1230,7 +1230,7 @@ span.end() → atomic CAS → buffer[idx] = span
 │  ───────────                                                     │
 │  • Python SDK (axonize-py)                                      │
 │  • 단일 노드, 단일/멀티 GPU                                       │
-│  • NVIDIA GPU only (pynvml)                                     │
+│  • NVIDIA GPU (pynvml) + Apple Silicon (IOKit)                  │
 │  • Full GPU + MIG 지원                                           │
 │  • 환경 무관 (Bare Metal, Docker, K8s, Cloud 등)                 │
 │  • 기본 대시보드 (Trace 뷰, GPU 뷰)                               │
@@ -1255,7 +1255,7 @@ span.end() → atomic CAS → buffer[idx] = span
 │  ❌ Excluded from MVP                                            │
 │  ────────────────────                                            │
 │  • 멀티 노드 분산 추론 (Tensor Parallelism)                       │
-│  • AMD ROCm, Google TPU, AWS Inferentia                         │
+│  • AMD ROCm, Google TPU, AWS Inferentia (GPUBackend 확장)       │
 │  • vGPU (VMware/Citrix 가상화)                                   │
 │  • 대규모 스케일 (일일 1억+ 추론)                                 │
 │  • Adaptive sampling                                             │
@@ -1358,27 +1358,48 @@ class DistributedTraceContext:
         pass
 ```
 
-### 9.2 Multi-Vendor GPU Support (v0.3)
+### 9.2 Multi-Vendor GPU Support
+
+GPU 백엔드는 `GPUBackend` Protocol로 추상화되어 있으며, 벤더별 구현이 자동 선택됩니다.
+
+**현재 지원:**
+
+| 벤더 | 백엔드 모듈 | 메트릭 소스 | 디바이스 라벨 |
+|------|------------|-----------|-------------|
+| **NVIDIA** | `_gpu_nvml.py` (NvmlBackend) | pynvml | `cuda:N` |
+| **Apple** | `_gpu_apple.py` (AppleSiliconBackend) | IOKit (ctypes) | `mps:0` |
+
+**백엔드 추상화:**
 
 ```python
-# Backend 추상화
-class GPUBackend(ABC):
-    @abstractmethod
-    def list_devices(self) -> List[GPUDevice]: ...
+@runtime_checkable
+class GPUBackend(Protocol):
+    vendor: str
+    def discover(self) -> list[DiscoveredGPU]: ...
+    def collect(self, handle: Any) -> _GPUSnapshot: ...
+    def shutdown(self) -> None: ...
+```
 
-    @abstractmethod
-    def get_metrics(self, device_id: str) -> GPUMetrics: ...
+**벤더 전달:**
+- SDK가 `gpu.N.vendor` OTLP 속성으로 벤더 정보 전송
+- Server는 이 속성을 파싱하여 GPU 레지스트리에 저장
+- 이전 SDK 호환: vendor 속성 없으면 "NVIDIA" fallback
 
-class NVIDIABackend(GPUBackend):
-    """pynvml 기반"""
-    pass
+**Apple Silicon 특성:**
+- 칩당 GPU 1개 (MIG 없음, Multi-GPU 없음)
+- UUID: `APPLE-{sha256(chip+hostname)[:12]}` (하드웨어 UUID 없으므로 deterministic hash)
+- 통합 메모리: `memory_total_gb` = 전체 시스템 메모리 (CPU/GPU 공유)
+- 일부 메트릭 unavailable → 0으로 보고 (temperature, clock)
 
+**미래 벤더:**
+
+```python
 class AMDBackend(GPUBackend):
-    """pyrsmi 기반"""
+    """pyrsmi 기반 — 미구현"""
     pass
 
 class TPUBackend(GPUBackend):
-    """Cloud TPU API 기반"""
+    """Cloud TPU API 기반 — 미구현"""
     pass
 ```
 

@@ -58,6 +58,17 @@ services:
       postgres:
         condition: service_healthy
 
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "${DASHBOARD_PORT:-3000}:3000"
+    networks:
+      - axonize-net
+    depends_on:
+      - axonize-server
+
 volumes:
   clickhouse-data:
   postgres-data:
