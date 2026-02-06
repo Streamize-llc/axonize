@@ -43,6 +43,7 @@ class LLMSpan(Span):
         model: str | None = None,
         model_version: str | None = None,
         inference_type: str = "llm",
+        sampling_rate: float = 1.0,
     ) -> None:
         super().__init__(
             name,
@@ -50,6 +51,7 @@ class LLMSpan(Span):
             kind=kind,
             service_name=service_name,
             environment=environment,
+            sampling_rate=sampling_rate,
         )
         self._tokens_input: int = 0
         self._tokens_output: int = 0

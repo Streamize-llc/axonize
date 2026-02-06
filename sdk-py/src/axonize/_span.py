@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 import time
 import uuid
 from contextvars import Token
@@ -32,6 +33,7 @@ class Span:
         kind: SpanKind = SpanKind.INTERNAL,
         service_name: str = "",
         environment: str = "development",
+        sampling_rate: float = 1.0,
     ) -> None:
         self.name = name
         self.kind = kind
@@ -46,14 +48,16 @@ class Span:
         self._gpu_labels: list[str] = []
         self._gpu_attributions: list[GPUAttribution] = []
 
-        # Parent/trace resolution
+        # Parent/trace resolution + sampling inheritance
         parent = get_current_span()
         if parent is not None:
             self.trace_id: str = parent.trace_id
             self.parent_span_id: str | None = parent.span_id
+            self._sampled: bool = parent._sampled
         else:
             self.trace_id = uuid.uuid4().hex
             self.parent_span_id = None
+            self._sampled = random.random() < sampling_rate  # noqa: S311
 
         self._start_time_ns: int = 0
         self._end_time_ns: int = 0
@@ -84,8 +88,8 @@ class Span:
 
             _current_span.reset(self._token)
 
-        # Enqueue immutable snapshot
-        if self._buffer is not None:
+        # Enqueue immutable snapshot (skip if not sampled)
+        if self._sampled and self._buffer is not None:
             self._buffer.enqueue(self._to_span_data())
 
     def set_attribute(self, key: str, value: str | int | float | bool) -> None:

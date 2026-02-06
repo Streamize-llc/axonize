@@ -159,4 +159,4 @@ Axonize follows OpenTelemetry semantic conventions with these prefixes:
 | `ai.llm.*` | LLM metrics | `ai.llm.tokens.input`, `ai.llm.ttft_ms` |
 | `ai.diffusion.*` | Diffusion params | `ai.diffusion.steps`, `ai.diffusion.cfg_scale` |
 | `gpu.N.*` | GPU attribution | `gpu.0.resource_uuid`, `gpu.0.vendor`, `gpu.0.utilization` |
-| `cost.*` | Cost tracking | `cost.usd` |
+| `cost.*` | Cost tracking (user-provided) | `cost.usd` |

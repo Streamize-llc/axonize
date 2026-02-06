@@ -1,6 +1,6 @@
 # Axonize
 
-**Observability for AI inference workloads.** Track every inference call with GPU-level metrics, latency breakdown, and cost attribution.
+**Observability for AI inference workloads.** Track every inference call with GPU-level metrics, latency breakdown, and cost tracking.
 
 Axonize sits between infrastructure monitoring (Grafana/Prometheus) and LLM service tracing (Langfuse/LangSmith), giving you inference-level visibility into how your models use GPU resources.
 

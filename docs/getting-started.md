@@ -131,6 +131,18 @@ with axonize.llm_span("generate", model="llama-3-70b") as s:
     #   - Total output tokens
 ```
 
+## 7. Track Costs
+
+Attach cost data to spans using the `cost.*` attribute prefix. Costs are user-provided values — Axonize stores and displays them but does not calculate them automatically.
+
+```python
+with axonize.llm_span("generate", model="gpt-4") as s:
+    s.set_tokens_input(500)
+    response = call_model(prompt)
+    s.set_tokens_output(150)
+    s.set_attribute("cost.usd", 0.0032)  # Your cost calculation
+```
+
 ## Configuration Reference
 
 | Parameter | Default | Description |

@@ -15,7 +15,8 @@ dependencies = [
 
 [project.optional-dependencies]
 nvidia = ["pynvml>=11.5"]
-all = ["pynvml>=11.5"]
+openai = ["openai>=1.0"]
+all = ["pynvml>=11.5", "openai>=1.0"]
 
 [dependency-groups]
 dev = [
@@ -45,6 +46,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["pynvml", "pynvml.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["openai", "openai.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

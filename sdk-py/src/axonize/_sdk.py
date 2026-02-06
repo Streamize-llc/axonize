@@ -76,6 +76,7 @@ class _AxonizeSDK:
             kind=kind,
             service_name=self.config.service_name,
             environment=self.config.environment,
+            sampling_rate=self.config.sampling_rate,
         )
 
     def create_llm_span(
@@ -97,6 +98,7 @@ class _AxonizeSDK:
             model=model,
             model_version=model_version,
             inference_type=inference_type,
+            sampling_rate=self.config.sampling_rate,
         )
 
 
