@@ -161,6 +161,11 @@ with axonize.span("inference") as s:
 | `GET /api/v1/gpus/{uuid}` | GPU detail |
 | `GET /api/v1/gpus/{uuid}/metrics` | GPU metric time series |
 | `GET /api/v1/analytics/overview` | Dashboard analytics |
+| `POST /api/v1/admin/tenants` | Create tenant (admin key required) |
+| `GET /api/v1/admin/tenants` | List tenants (admin key required) |
+| `POST /api/v1/admin/tenants/{id}/keys` | Create API key for tenant |
+| `DELETE /api/v1/admin/tenants/{id}/keys/{prefix}` | Revoke API key (admin key required) |
+| `GET /api/v1/admin/tenants/{id}/usage` | Tenant usage (spans + GPU seconds) |
 
 ## Development
 

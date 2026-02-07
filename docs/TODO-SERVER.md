@@ -114,7 +114,19 @@
 
 ---
 
-## 8. 우선순위
+## 8. 멀티테넌트 지원
+
+- [x] `tenant_id` context propagation (모든 코드 경로)
+- [x] `auth_mode` 설정 (`static` / `multi_tenant`)
+- [x] API key → tenant_id 리졸빙 (SHA-256 해시, 5분 캐시)
+- [x] 모든 SQL 쿼리에 `tenant_id` 필터 적용
+- [x] PostgreSQL 복합 PK `(tenant_id, uuid)` 마이그레이션
+- [x] 사용량 미터링 (span count + GPU seconds)
+- [x] Admin API: 테넌트 CRUD, API key 발급/폐기, 사용량 조회
+
+---
+
+## 9. 우선순위
 
 | 순서 | 항목 | 이유 |
 |------|------|------|

@@ -51,6 +51,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-axonize}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-axonize}
       AXONIZE_API_KEY: ${AXONIZE_API_KEY:-}
+      AXONIZE_AUTH_MODE: ${AXONIZE_AUTH_MODE:-static}
+      AXONIZE_ADMIN_KEY: ${AXONIZE_ADMIN_KEY:-}
     networks:
       - axonize-net
     depends_on:

@@ -32,12 +32,26 @@ The server loads configuration from environment variables. See `.env.example` fo
 | `POSTGRES_USER` | `axonize` | PostgreSQL user |
 | `POSTGRES_PASSWORD` | `axonize` | PostgreSQL password |
 
+### Authentication Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AXONIZE_API_KEY` | *(empty)* | Static API key for single-tenant mode |
+| `AXONIZE_AUTH_MODE` | `static` | Auth mode: `static` (single key) or `multi_tenant` (per-tenant keys) |
+| `AXONIZE_ADMIN_KEY` | *(empty)* | Admin API key (required for multi_tenant mode) |
+
 ### Server Ports
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
 | 4317 | gRPC | OTLP trace ingest |
 | 8080 | HTTP | REST API + health checks |
+
+### Auth Modes
+
+**Static (default):** Set `AXONIZE_API_KEY` for simple single-key auth. All data is stored under `tenant_id = "default"`.
+
+**Multi-tenant:** Set `AXONIZE_AUTH_MODE=multi_tenant` and `AXONIZE_ADMIN_KEY` to enable per-tenant isolation. Use the Admin API to create tenants and issue API keys. Each SDK instance authenticates with its own key, and data is isolated by tenant.
 
 ## Database Migrations
 
@@ -48,8 +62,8 @@ make migrate
 ```
 
 This runs `migrations/migrate.sh` which applies:
-- `migrations/clickhouse/` — ClickHouse tables (spans, gpu_metrics)
-- `migrations/postgres/` — PostgreSQL tables (physical_gpus, compute_resources, resource_contexts)
+- `migrations/clickhouse/` — ClickHouse tables (spans, traces, gpu_metrics) with `tenant_id` columns
+- `migrations/postgres/` — PostgreSQL tables (physical_gpus, compute_resources, resource_contexts, tenants, api_keys, usage_records)
 
 ## REST API Endpoints
 
@@ -97,6 +111,30 @@ GET /api/v1/analytics/overview
     &end=RFC3339            End time (default: now)
     Returns: total_traces, avg_latency_ms, error_rate,
              active_gpu_count, throughput_series, latency_series
+```
+
+### Admin API (multi_tenant mode)
+
+Requires `Authorization: Bearer <ADMIN_KEY>` header.
+
+```
+POST /api/v1/admin/tenants
+    Body: {"name": "Acme Corp", "plan": "pro"}
+    Returns: {"tenant_id": "tn_...", "name": "...", "plan": "...", "created_at": "..."}
+
+GET /api/v1/admin/tenants
+    Returns: {"tenants": [...]}
+
+POST /api/v1/admin/tenants/{id}/keys
+    Body: {"name": "production", "scopes": "ingest,read"}
+    Returns: {"key": "ax_live_...", "key_prefix": "...", ...}
+    Note: Raw key is shown only at creation time
+
+DELETE /api/v1/admin/tenants/{id}/keys/{prefix}
+    Revokes the API key
+
+GET /api/v1/admin/tenants/{id}/usage
+    Returns today's usage: {"span_count": N, "gpu_seconds": N}
 ```
 
 ## Production Considerations

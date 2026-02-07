@@ -13,6 +13,7 @@
 - [x] 인덱스 설정
 - [x] TTL 설정 (spans: 30일, traces: 90일, gpu_metrics: 7일)
 - [x] 마이그레이션 스크립트 관리 방안
+- [x] `tenant_id` 컬럼 추가 마이그레이션 (003_add_tenant_id.sql)
 
 ### 1.2 PostgreSQL
 - [x] physical_gpus 테이블 생성 스크립트
@@ -20,6 +21,8 @@
 - [x] resource_contexts 테이블 생성 스크립트
 - [x] 인덱스 설정 (labels JSONB GIN 인덱스)
 - [x] 마이그레이션 도구 선택 (Flyway, golang-migrate 등)
+- [x] `tenant_id` 컬럼 + 복합 PK 마이그레이션 (002_add_tenant_id.sql)
+- [x] `tenants`, `api_keys`, `usage_records` 테이블 생성
 
 ---
 

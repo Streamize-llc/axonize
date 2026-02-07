@@ -1,8 +1,8 @@
 # Axonize Architecture Document
 
-> **Version**: 0.1.1 (Draft)
-> **Last Updated**: 2025-12-29
-> **Status**: Design Phase
+> **Version**: 0.2.0
+> **Last Updated**: 2026-02-07
+> **Status**: Implementation Phase
 
 ---
 
@@ -910,6 +910,7 @@ span.set_attribute("cost.estimated_usd", 0.0023)
 CREATE TABLE spans (
     -- 식별자
     trace_id String,
+    tenant_id String DEFAULT 'default',
     span_id String,
     parent_span_id Nullable(String),
 
@@ -942,6 +943,7 @@ CREATE TABLE spans (
     gpu_resource_uuids Array(String),
     gpu_physical_uuids Array(String),
     gpu_models Array(String),
+    gpu_vendors Array(String),
     gpu_node_ids Array(String),
     gpu_memory_used_gb Array(Float32),
     gpu_utilization Array(Float32),
@@ -959,6 +961,7 @@ CREATE TABLE spans (
 
     -- 파티셔닝/정렬 키
     INDEX idx_trace_id trace_id TYPE bloom_filter GRANULARITY 1,
+    INDEX idx_tenant_id tenant_id TYPE bloom_filter GRANULARITY 1,
     INDEX idx_model_name model_name TYPE bloom_filter GRANULARITY 1,
     INDEX idx_service_name service_name TYPE bloom_filter GRANULARITY 1
 )
@@ -973,6 +976,7 @@ TTL start_time + INTERVAL 30 DAY;
 -- ============================================
 CREATE TABLE traces (
     trace_id String,
+    tenant_id String DEFAULT 'default',
 
     -- 타이밍
     start_time DateTime64(3),
@@ -995,7 +999,8 @@ CREATE TABLE traces (
     gpu_count UInt8,
     total_gpu_time_ms Float64,
 
-    INDEX idx_trace_id trace_id TYPE bloom_filter GRANULARITY 1
+    INDEX idx_trace_id trace_id TYPE bloom_filter GRANULARITY 1,
+    INDEX idx_traces_tenant_id tenant_id TYPE bloom_filter GRANULARITY 1
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(start_time)
@@ -1008,6 +1013,7 @@ TTL start_time + INTERVAL 90 DAY;
 -- ============================================
 CREATE TABLE gpu_metrics (
     timestamp DateTime64(3),
+    tenant_id String DEFAULT 'default',
 
     -- GPU 식별
     resource_uuid String,
@@ -1025,7 +1031,8 @@ CREATE TABLE gpu_metrics (
     -- 추론 활동
     active_spans UInt16,
 
-    INDEX idx_resource_uuid resource_uuid TYPE bloom_filter GRANULARITY 1
+    INDEX idx_resource_uuid resource_uuid TYPE bloom_filter GRANULARITY 1,
+    INDEX idx_gpu_metrics_tenant_id tenant_id TYPE bloom_filter GRANULARITY 1
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
@@ -1040,7 +1047,9 @@ TTL timestamp + INTERVAL 7 DAY;
 -- Physical GPUs (불변 하드웨어 정보)
 -- ============================================
 CREATE TABLE physical_gpus (
-    uuid VARCHAR(64) PRIMARY KEY,  -- GPU-xxxx
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    uuid VARCHAR(64) NOT NULL,  -- GPU-xxxx
+    PRIMARY KEY (tenant_id, uuid),
 
     -- 하드웨어 스펙
     model VARCHAR(128) NOT NULL,
@@ -1086,13 +1095,16 @@ CREATE TABLE physical_gpus (
 -- Compute Resources (논리적 연산 단위)
 -- ============================================
 CREATE TABLE compute_resources (
-    resource_uuid VARCHAR(64) PRIMARY KEY,  -- MIG-xxxx or GPU-xxxx
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    resource_uuid VARCHAR(64) NOT NULL,  -- MIG-xxxx or GPU-xxxx
+    PRIMARY KEY (tenant_id, resource_uuid),
 
     -- 타입
     resource_type VARCHAR(32) NOT NULL,  -- full_gpu, mig_1g_10gb, etc.
 
     -- 물리 GPU 참조
-    physical_gpu_uuid VARCHAR(64) NOT NULL REFERENCES physical_gpus(uuid),
+    physical_gpu_uuid VARCHAR(64) NOT NULL,
+    FOREIGN KEY (tenant_id, physical_gpu_uuid) REFERENCES physical_gpus(tenant_id, uuid),
 
     -- 스펙
     memory_gb DECIMAL(5,1) NOT NULL,
@@ -1116,10 +1128,13 @@ CREATE TABLE compute_resources (
 -- Resource Contexts (런타임 매핑)
 -- ============================================
 CREATE TABLE resource_contexts (
-    context_id VARCHAR(64) PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+    context_id VARCHAR(64) NOT NULL,
+    PRIMARY KEY (tenant_id, context_id),
 
     -- 리소스 참조
-    resource_uuid VARCHAR(64) NOT NULL REFERENCES compute_resources(resource_uuid),
+    resource_uuid VARCHAR(64) NOT NULL,
+    FOREIGN KEY (tenant_id, resource_uuid) REFERENCES compute_resources(tenant_id, resource_uuid),
 
     -- 사용자 관점
     user_label VARCHAR(16) NOT NULL,  -- cuda:0
@@ -1145,6 +1160,54 @@ CREATE TABLE resource_contexts (
 
 -- labels 내 특정 키로 검색 가능
 CREATE INDEX idx_labels ON resource_contexts USING GIN (labels);
+
+
+-- ============================================
+-- Tenants (멀티테넌트 레지스트리)
+-- ============================================
+CREATE TABLE tenants (
+    tenant_id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(256) NOT NULL,
+    plan VARCHAR(32) NOT NULL DEFAULT 'free',        -- free, pro, enterprise, self-hosted
+    status VARCHAR(16) NOT NULL DEFAULT 'active',    -- active, suspended, deleted
+    max_spans_per_day BIGINT DEFAULT 100000,
+    gpu_profiling_enabled BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+
+-- ============================================
+-- API Keys (테넌트당 여러 개)
+-- ============================================
+CREATE TABLE api_keys (
+    key_hash VARCHAR(64) PRIMARY KEY,        -- SHA-256
+    key_prefix VARCHAR(12) NOT NULL,         -- 표시용 "ax_live_abc..."
+    tenant_id VARCHAR(64) NOT NULL REFERENCES tenants(tenant_id),
+    name VARCHAR(256),
+    scopes VARCHAR(256) DEFAULT 'ingest,read',
+    status VARCHAR(16) NOT NULL DEFAULT 'active',
+    last_used_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW(),
+    expires_at TIMESTAMP
+);
+CREATE INDEX idx_api_keys_tenant_id ON api_keys (tenant_id);
+
+
+-- ============================================
+-- Usage Records (하이브리드 과금)
+-- ============================================
+CREATE TABLE usage_records (
+    id BIGSERIAL PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL REFERENCES tenants(tenant_id),
+    period_start DATE NOT NULL,
+    period_end DATE NOT NULL,
+    span_count BIGINT DEFAULT 0,
+    gpu_seconds BIGINT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(tenant_id, period_start)
+);
+CREATE INDEX idx_usage_tenant_period ON usage_records (tenant_id, period_start);
 ```
 
 ---
@@ -1299,15 +1362,20 @@ MVP에서 의도적으로 미해결로 남겨둔 사항들입니다. 구현 진�
 조치: MVP 규모에서 모니터링, 병목 발생 시 별도 테이블로 분리
 ```
 
-#### 3. 보안 정책 미정의
+#### 3. 보안 정책 (부분 구현)
 ```
+구현 완료:
+- SDK ↔ Server 인증: API Key (Bearer 토큰), static / multi_tenant 모드
+- Multi-tenant 데이터 격리: tenant_id 기반 행 수준 격리 (모든 쿼리에 tenant_id 필터)
+- API Key 관리: Admin API로 발급/폐기, SHA-256 해시 저장
+- 사용량 미터링: span 수 + GPU 초 (하이브리드 과금 모델)
+
 미정의 항목:
-- SDK ↔ Server 인증 방식 (API Key, mTLS 등)
 - TLS 설정
 - 민감 데이터 (Prompt 내용 등) 처리 정책
-- Multi-tenant 데이터 격리
+- RBAC (역할 기반 접근 제어)
 
-조치: MVP는 내부망/신뢰 환경 가정, v0.2에서 보안 레이어 추가
+조치: TLS, RBAC는 M8 Enterprise에서 추가
 ```
 
 #### 4. 비용 계산 정책 미정의

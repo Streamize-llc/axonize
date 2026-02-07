@@ -120,7 +120,7 @@ func (s *PostgresStore) GetGPU(ctx context.Context, tenantID, uuid string) (*GPU
 	var g GPUDetail
 	err := s.pool.QueryRow(ctx, `
 		SELECT cr.resource_uuid, cr.physical_gpu_uuid, pg.model, cr.resource_type, pg.node_id,
-		       cr.first_seen_at, cr.last_seen_at
+		       cr.created_at, cr.last_seen_at
 		FROM compute_resources cr
 		JOIN physical_gpus pg ON pg.tenant_id = cr.tenant_id AND pg.uuid = cr.physical_gpu_uuid
 		WHERE cr.tenant_id = $1 AND cr.resource_uuid = $2

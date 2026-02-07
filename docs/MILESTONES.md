@@ -493,18 +493,18 @@ Part 2: Datacenter Edition (M6 ~ M9)
 
 #### 완료 기준 (Definition of Done)
 
-- [ ] 멀티테넌시: 조직/팀별 데이터 격리
+- [x] 멀티테넌시: 조직/팀별 데이터 격리 *(tenant_id 기반 행 수준 격리 구현)*
 - [ ] RBAC: Admin, Viewer, Editor 역할 기반 접근 제어
 - [ ] SSO: OIDC/SAML 연동 (Okta, Google Workspace 등)
 - [ ] 알림 시스템: 임계값 기반 알림 (Slack, Email, Webhook)
 - [ ] 감사 로그 (Audit Log): 주요 액션 기록
-- [ ] API Key 관리: SDK 인증용 키 발급/폐기
+- [x] API Key 관리: SDK 인증용 키 발급/폐기 *(Admin API 구현)*
 
 #### 주요 작업 항목
 
 | 작업 | 설명 |
 |------|------|
-| 멀티테넌시 데이터 모델 (organization_id, team_id) | ClickHouse 파티셔닝, PostgreSQL row-level security |
+| ~~멀티테넌시 데이터 모델~~ ✅ | tenant_id 기반 격리 구현 (ClickHouse bloom_filter, PostgreSQL composite PK) |
 | 사용자/역할/권한 관리 (PostgreSQL) | users, roles, permissions 테이블 |
 | RBAC 미들웨어 (서버) | API 요청별 권한 검증 |
 | SSO 연동 (OIDC Provider) | `dex` 또는 직접 구현 |
@@ -512,7 +512,7 @@ Part 2: Datacenter Edition (M6 ~ M9)
 | 알림 채널: Slack, Email, Webhook, PagerDuty | 채널 어댑터 패턴 |
 | 대시보드: 팀/조직 관리 UI | 설정 페이지 |
 | 대시보드: 알림 규칙 관리 UI | 생성/편집/삭제/테스트 |
-| API Key 발급/관리 | SDK → Server 인증 |
+| ~~API Key 발급/관리~~ ✅ | Admin API로 구현 (생성/폐기/사용량 조회) |
 | 감사 로그 | 주요 CRUD 작업 기록 |
 
 #### 기술 결정 사항

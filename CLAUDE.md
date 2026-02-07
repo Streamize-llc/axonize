@@ -67,25 +67,49 @@ GPU metrics are collected in a separate daemon thread by `GPUProfiler` and attac
 - `gpu.N.vendor` OTLP attribute carries vendor info SDK→Server
 
 ### Server structure
-- `internal/ingest/handler.go` — OTLP gRPC handler: parses protobuf spans, extracts GPU attributes (`gpu.N.*`), batches to ClickHouse, upserts GPU registry to PostgreSQL
-- `internal/store/` — ClickHouse (time-series spans + gpu_metrics) and PostgreSQL (GPU registry) stores
-- `internal/api/` — REST endpoints for traces, GPUs, analytics
+- `internal/server.go` — Orchestrates gRPC + HTTP listeners, wires auth interceptors based on `auth_mode`
+- `internal/ingest/handler.go` — OTLP gRPC handler: parses protobuf spans, extracts GPU attributes (`gpu.N.*`), batches to ClickHouse, upserts GPU registry to PostgreSQL; records usage metrics when multi-tenant
+- `internal/store/` — ClickHouse (time-series spans + gpu_metrics) and PostgreSQL (GPU registry) stores; all queries filter by `tenant_id`
+- `internal/api/` — REST endpoints for traces, GPUs, analytics, admin (tenant/key management)
 - `internal/config/` — YAML config with env var overrides (`AXONIZE_CONFIG` or default `config.yaml`)
+- `internal/tenant/` — Multi-tenant support: context propagation (`tenant.go`), API key → tenant_id resolution with 5-min cache (`resolver.go`), usage metering for hybrid billing (`usage.go`)
+
+### Server interface pattern
+The Go server uses interface-based dependency injection. API handlers depend on query interfaces (`TraceQuerier`, `GPUQuerier`, `GPUMetricQuerier`, `AnalyticsQuerier`), not concrete stores. Ingest depends on `SpanWriter`, `GPURegistrar`, and `UsageRecorder`. When adding new query methods: define in the appropriate interface in `api/`, implement in `store/`, and the concrete store satisfies the interface implicitly.
+
+### Multi-tenant context flow
+Every request carries a `tenant_id` through Go's `context.Context`:
+1. **gRPC**: Interceptor in `server.go` extracts Bearer token → resolves tenant → `tenant.WithTenantID(ctx, id)`
+2. **HTTP**: Middleware in `router.go` does the same for REST API calls
+3. **Handlers**: Extract via `tenant.FromContext(r.Context())` and pass to store queries
+4. **Store**: All SQL queries include `WHERE tenant_id = ?`
+5. **Ingest**: `convertRequest()` stamps `record.TenantID` from context; `registerGPUs()` propagates to GPU records
+
+When `auth_mode = "static"` (default), tenant_id is always `"default"` — zero behavior change from single-tenant.
+
+### Authentication modes
+- **static** (default): Single API key via `AXONIZE_API_KEY`, all data under `tenant_id = "default"`
+- **multi_tenant**: API key → tenant_id resolution via `api_keys` table (SHA-256 hash lookup, 5-min cache). Admin API protected by `AXONIZE_ADMIN_KEY`
 
 ### Databases
-- **ClickHouse**: `spans`, `gpu_metrics` tables. Partitioned by day, TTL 7-90 days.
-- **PostgreSQL**: 3-layer GPU identity model:
+- **ClickHouse**: `spans`, `traces`, `gpu_metrics` tables. All include `tenant_id` column. Partitioned by day, TTL 7-90 days.
+- **PostgreSQL**: 3-layer GPU identity model (all with composite `(tenant_id, ...)` PKs) + multi-tenant tables (`tenants`, `api_keys`, `usage_records`):
   1. `physical_gpus` — Immutable hardware (UUID, model, vendor, node)
   2. `compute_resources` — Logical unit (full GPU or MIG instance)
   3. `resource_contexts` — Runtime labels ("cuda:0", pod/container info)
 
 This disambiguates MIG environments where every pod sees "cuda:0".
 
+### Migrations
+Raw SQL files in `migrations/{clickhouse,postgres}/`, applied alphabetically by `migrate.sh`. To add a new migration: create `NNN_description.sql` with the next sequence number. Use `IF NOT EXISTS` / `IF EXISTS` for idempotency.
+
 ### Docker services
 - `clickhouse` — ports 8123 (HTTP), 9000 (native)
 - `postgres` — port 5432
 - `axonize-server` — gRPC :4317, HTTP :8080
 - `dashboard` — port 3000
+
+Environment variables for auth in docker-compose: `AXONIZE_API_KEY`, `AXONIZE_AUTH_MODE`, `AXONIZE_ADMIN_KEY`
 
 ## Key Conventions
 
@@ -97,3 +121,4 @@ This disambiguates MIG environments where every pod sees "cuda:0".
 - Go: `log/slog` for structured logging; context-first function signatures; `fmt.Errorf("...: %w", err)` for error wrapping
 - Go is not installed in the local dev environment — Go validation happens in CI
 - Inference must never be affected by tracing failures — all exporter/GPU errors are swallowed with debug logging
+- When wrapping a nil pointer in a Go interface, use an explicit nil check before assignment to avoid non-nil interface wrapping nil pointer (see `server.go` UsageRecorder pattern)
