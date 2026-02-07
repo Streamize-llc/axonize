@@ -6,16 +6,18 @@ import (
 	"time"
 
 	"github.com/axonize/server/internal/store"
+	"github.com/axonize/server/internal/tenant"
 )
 
 // AnalyticsQuerier is the interface for analytics queries.
 type AnalyticsQuerier interface {
-	QueryAnalyticsOverview(ctx context.Context, start, end time.Time) (*store.AnalyticsOverview, error)
+	QueryAnalyticsOverview(ctx context.Context, tenantID string, start, end time.Time) (*store.AnalyticsOverview, error)
 }
 
 func handleAnalyticsOverview(querier AnalyticsQuerier) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
+		tenantID := tenant.FromContext(r.Context())
 
 		end := time.Now()
 		start := end.Add(-24 * time.Hour)
@@ -31,7 +33,7 @@ func handleAnalyticsOverview(querier AnalyticsQuerier) http.HandlerFunc {
 			}
 		}
 
-		overview, err := querier.QueryAnalyticsOverview(r.Context(), start, end)
+		overview, err := querier.QueryAnalyticsOverview(r.Context(), tenantID, start, end)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return

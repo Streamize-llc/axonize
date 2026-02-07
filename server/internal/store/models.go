@@ -4,6 +4,7 @@ import "time"
 
 // SpanRecord maps 1:1 to the ClickHouse spans table.
 type SpanRecord struct {
+	TenantID     string
 	TraceID      string
 	SpanID       string
 	ParentSpanID *string
@@ -91,6 +92,7 @@ type TraceDetail struct {
 
 // TraceFilter holds query parameters for trace listing.
 type TraceFilter struct {
+	TenantID    string
 	ServiceName *string
 	StartTime   *time.Time
 	EndTime     *time.Time
@@ -100,6 +102,7 @@ type TraceFilter struct {
 
 // PhysicalGPURecord maps to the physical_gpus PostgreSQL table.
 type PhysicalGPURecord struct {
+	TenantID      string  `json:"-"`
 	UUID          string  `json:"uuid"`
 	Model         string  `json:"model"`
 	Vendor        string  `json:"vendor"`
@@ -109,6 +112,7 @@ type PhysicalGPURecord struct {
 
 // ComputeResourceRecord maps to the compute_resources PostgreSQL table.
 type ComputeResourceRecord struct {
+	TenantID     string  `json:"-"`
 	ResourceUUID string  `json:"resource_uuid"`
 	PhysicalUUID string  `json:"physical_uuid"`
 	ResourceType string  `json:"resource_type"`
@@ -117,6 +121,7 @@ type ComputeResourceRecord struct {
 
 // ResourceContextRecord maps to the resource_contexts PostgreSQL table.
 type ResourceContextRecord struct {
+	TenantID     string `json:"-"`
 	ResourceUUID string `json:"resource_uuid"`
 	UserLabel    string `json:"user_label"`
 	Hostname     string `json:"hostname"`

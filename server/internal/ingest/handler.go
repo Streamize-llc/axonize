@@ -13,6 +13,7 @@ import (
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 
 	"github.com/axonize/server/internal/store"
+	"github.com/axonize/server/internal/tenant"
 )
 
 const (
@@ -33,12 +34,19 @@ type GPURegistrar interface {
 	UpsertResourceContext(ctx context.Context, rc store.ResourceContextRecord) error
 }
 
+// UsageRecorder records span/GPU usage for metering. Nil in static mode.
+type UsageRecorder interface {
+	RecordSpans(ctx context.Context, tenantID string, count int)
+	RecordGPUSeconds(ctx context.Context, tenantID string, seconds int64)
+}
+
 // Handler implements the OTLP TraceService gRPC handler with a batching buffer.
 type Handler struct {
 	collectorpb.UnimplementedTraceServiceServer
 
 	writer    SpanWriter
 	registrar GPURegistrar
+	meter     UsageRecorder
 	logger    *slog.Logger
 
 	mu        sync.Mutex
@@ -50,10 +58,11 @@ type Handler struct {
 }
 
 // NewHandler creates a new ingest handler.
-func NewHandler(writer SpanWriter, registrar GPURegistrar, logger *slog.Logger) *Handler {
+func NewHandler(writer SpanWriter, registrar GPURegistrar, logger *slog.Logger, meter UsageRecorder) *Handler {
 	return &Handler{
 		writer:    writer,
 		registrar: registrar,
+		meter:     meter,
 		logger:    logger,
 		buffer:    make([]store.SpanRecord, 0, defaultBatchSize),
 		batchSize: defaultBatchSize,
@@ -79,7 +88,7 @@ func (h *Handler) Export(
 	ctx context.Context,
 	req *collectorpb.ExportTraceServiceRequest,
 ) (*collectorpb.ExportTraceServiceResponse, error) {
-	records := convertRequest(req)
+	records := convertRequest(ctx, req)
 
 	h.mu.Lock()
 	h.buffer = append(h.buffer, records...)
@@ -134,10 +143,43 @@ func (h *Handler) flush() {
 
 	// Register GPUs in PostgreSQL
 	h.registerGPUs(ctx, batch)
+
+	// Record usage for metering
+	if h.meter != nil {
+		h.recordUsage(ctx, batch)
+	}
+}
+
+// recordUsage aggregates span counts and GPU seconds per tenant and records them.
+func (h *Handler) recordUsage(ctx context.Context, batch []store.SpanRecord) {
+	spanCounts := make(map[string]int)
+	gpuSeconds := make(map[string]int64)
+
+	for _, span := range batch {
+		spanCounts[span.TenantID]++
+		if len(span.GpuResourceUUIDs) > 0 {
+			// GPU seconds = duration in seconds * number of GPUs
+			durationSec := int64(span.DurationMs / 1000)
+			if durationSec < 1 {
+				durationSec = 1
+			}
+			gpuSeconds[span.TenantID] += durationSec * int64(len(span.GpuResourceUUIDs))
+		}
+	}
+
+	for tid, count := range spanCounts {
+		h.meter.RecordSpans(ctx, tid, count)
+	}
+	for tid, sec := range gpuSeconds {
+		if sec > 0 {
+			h.meter.RecordGPUSeconds(ctx, tid, sec)
+		}
+	}
 }
 
 // convertRequest transforms an OTLP ExportTraceServiceRequest into SpanRecords.
-func convertRequest(req *collectorpb.ExportTraceServiceRequest) []store.SpanRecord {
+func convertRequest(ctx context.Context, req *collectorpb.ExportTraceServiceRequest) []store.SpanRecord {
+	tenantID := tenant.FromContext(ctx)
 	var records []store.SpanRecord
 
 	for _, rs := range req.GetResourceSpans() {
@@ -155,6 +197,7 @@ func convertRequest(req *collectorpb.ExportTraceServiceRequest) []store.SpanReco
 		for _, ss := range rs.GetScopeSpans() {
 			for _, span := range ss.GetSpans() {
 				record := spanToRecord(span, serviceName, environment)
+				record.TenantID = tenantID
 				records = append(records, record)
 			}
 		}
@@ -382,6 +425,7 @@ func (h *Handler) registerGPUs(ctx context.Context, batch []store.SpanRecord) {
 			}
 
 			if err := h.registrar.UpsertPhysicalGPU(ctx, store.PhysicalGPURecord{
+				TenantID:      span.TenantID,
 				UUID:          physicalUUID,
 				Model:         model,
 				Vendor:        vendor,
@@ -392,6 +436,7 @@ func (h *Handler) registerGPUs(ctx context.Context, batch []store.SpanRecord) {
 			}
 
 			if err := h.registrar.UpsertComputeResource(ctx, store.ComputeResourceRecord{
+				TenantID:     span.TenantID,
 				ResourceUUID: resourceUUID,
 				PhysicalUUID: physicalUUID,
 				ResourceType: resourceType,
@@ -407,6 +452,7 @@ func (h *Handler) registerGPUs(ctx context.Context, batch []store.SpanRecord) {
 			}
 			if userLabel != "" {
 				if err := h.registrar.UpsertResourceContext(ctx, store.ResourceContextRecord{
+					TenantID:     span.TenantID,
 					ResourceUUID: resourceUUID,
 					UserLabel:    userLabel,
 					Hostname:     nodeID,
@@ -417,4 +463,3 @@ func (h *Handler) registerGPUs(ctx context.Context, batch []store.SpanRecord) {
 		}
 	}
 }
-

@@ -6,22 +6,24 @@ import (
 	"time"
 
 	"github.com/axonize/server/internal/store"
+	"github.com/axonize/server/internal/tenant"
 )
 
 // GPUQuerier is the interface for GPU queries.
 type GPUQuerier interface {
-	ListGPUs(ctx context.Context) ([]store.GPUSummary, error)
-	GetGPU(ctx context.Context, uuid string) (*store.GPUDetail, error)
+	ListGPUs(ctx context.Context, tenantID string) ([]store.GPUSummary, error)
+	GetGPU(ctx context.Context, tenantID, uuid string) (*store.GPUDetail, error)
 }
 
 // GPUMetricQuerier is the interface for GPU metric time-series queries.
 type GPUMetricQuerier interface {
-	QueryGPUMetrics(ctx context.Context, uuid string, start, end time.Time) ([]store.GPUMetricRow, error)
+	QueryGPUMetrics(ctx context.Context, tenantID, uuid string, start, end time.Time) ([]store.GPUMetricRow, error)
 }
 
 func handleListGPUs(querier GPUQuerier) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		gpus, err := querier.ListGPUs(r.Context())
+		tenantID := tenant.FromContext(r.Context())
+		gpus, err := querier.ListGPUs(r.Context(), tenantID)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
@@ -43,7 +45,8 @@ func handleGetGPU(querier GPUQuerier) http.HandlerFunc {
 			return
 		}
 
-		detail, err := querier.GetGPU(r.Context(), uuid)
+		tenantID := tenant.FromContext(r.Context())
+		detail, err := querier.GetGPU(r.Context(), tenantID, uuid)
 		if err != nil {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "gpu not found"})
 			return
@@ -62,6 +65,7 @@ func handleGetGPUMetrics(querier GPUMetricQuerier) http.HandlerFunc {
 		}
 
 		q := r.URL.Query()
+		tenantID := tenant.FromContext(r.Context())
 
 		// Default to last 1 hour
 		end := time.Now()
@@ -78,7 +82,7 @@ func handleGetGPUMetrics(querier GPUMetricQuerier) http.HandlerFunc {
 			}
 		}
 
-		metrics, err := querier.QueryGPUMetrics(r.Context(), uuid, start, end)
+		metrics, err := querier.QueryGPUMetrics(r.Context(), tenantID, uuid, start, end)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return

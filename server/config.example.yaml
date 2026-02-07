@@ -1,6 +1,9 @@
 server:
   grpc_port: 4317
   http_port: 8080
+  # api_key: ""           # Static API key (for single-tenant / self-hosted)
+  # auth_mode: "static"   # "static" (default) or "multi_tenant"
+  # admin_key: ""         # Admin API key (required for multi_tenant mode)
 
 clickhouse:
   host: localhost

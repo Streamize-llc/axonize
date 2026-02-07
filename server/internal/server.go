@@ -22,6 +22,7 @@ import (
 	"github.com/axonize/server/internal/config"
 	"github.com/axonize/server/internal/ingest"
 	"github.com/axonize/server/internal/store"
+	"github.com/axonize/server/internal/tenant"
 )
 
 // Server orchestrates the gRPC and HTTP listeners.
@@ -29,11 +30,13 @@ type Server struct {
 	cfg    *config.Config
 	logger *slog.Logger
 
-	chStore *store.ClickHouseStore
-	pgStore *store.PostgresStore
-	ingest  *ingest.Handler
-	grpcSrv *grpc.Server
-	httpSrv *http.Server
+	chStore  *store.ClickHouseStore
+	pgStore  *store.PostgresStore
+	ingest   *ingest.Handler
+	grpcSrv  *grpc.Server
+	httpSrv  *http.Server
+	resolver *tenant.Resolver
+	meter    *tenant.UsageMeter
 }
 
 // NewServer creates and wires all server components.
@@ -48,13 +51,31 @@ func NewServer(cfg *config.Config, logger *slog.Logger) (*Server, error) {
 		return nil, fmt.Errorf("postgresql: %w", err)
 	}
 
-	handler := ingest.NewHandler(chStore, pgStore, logger)
-	router := api.NewRouter(chStore, pgStore, cfg.Server.APIKey)
+	s := &Server{
+		cfg:     cfg,
+		logger:  logger,
+		chStore: chStore,
+		pgStore: pgStore,
+	}
 
+	// Multi-tenant setup
 	var grpcOpts []grpc.ServerOption
-	if cfg.Server.APIKey != "" {
+	if cfg.Server.AuthMode == "multi_tenant" {
+		s.resolver = tenant.NewResolver(pgStore.Pool(), logger)
+		s.meter = tenant.NewUsageMeter(pgStore.Pool(), logger)
+		grpcOpts = append(grpcOpts, grpc.UnaryInterceptor(multiTenantInterceptor(s.resolver)))
+	} else if cfg.Server.APIKey != "" {
 		grpcOpts = append(grpcOpts, grpc.UnaryInterceptor(apiKeyInterceptor(cfg.Server.APIKey)))
 	}
+
+	var meter ingest.UsageRecorder
+	if s.meter != nil {
+		meter = s.meter
+	}
+	handler := ingest.NewHandler(chStore, pgStore, logger, meter)
+	s.ingest = handler
+
+	router := api.NewRouter(chStore, pgStore, cfg.Server.APIKey, cfg.Server.AuthMode, s.resolver, cfg.Server.AdminKey)
 	grpcSrv := grpc.NewServer(grpcOpts...)
 	collectorpb.RegisterTraceServiceServer(grpcSrv, handler)
 
@@ -65,15 +86,10 @@ func NewServer(cfg *config.Config, logger *slog.Logger) (*Server, error) {
 		WriteTimeout: 30 * time.Second,
 	}
 
-	return &Server{
-		cfg:     cfg,
-		logger:  logger,
-		chStore: chStore,
-		pgStore: pgStore,
-		ingest:  handler,
-		grpcSrv: grpcSrv,
-		httpSrv: httpSrv,
-	}, nil
+	s.grpcSrv = grpcSrv
+	s.httpSrv = httpSrv
+
+	return s, nil
 }
 
 // Run starts both listeners and blocks until a signal is received.
@@ -144,6 +160,7 @@ func (s *Server) Shutdown() error {
 
 // apiKeyInterceptor returns a gRPC unary interceptor that validates
 // the "authorization" metadata key against "Bearer <apiKey>".
+// Sets tenant_id to "default" for static auth mode.
 func apiKeyInterceptor(apiKey string) grpc.UnaryServerInterceptor {
 	expected := "Bearer " + apiKey
 	return func(
@@ -160,6 +177,36 @@ func apiKeyInterceptor(apiKey string) grpc.UnaryServerInterceptor {
 		if len(vals) == 0 || !strings.EqualFold(vals[0], expected) {
 			return nil, status.Error(codes.Unauthenticated, "invalid API key")
 		}
+		ctx = tenant.WithTenantID(ctx, tenant.DefaultTenantID)
+		return handler(ctx, req)
+	}
+}
+
+// multiTenantInterceptor returns a gRPC unary interceptor that resolves
+// the API key to a tenant_id via the tenant.Resolver.
+func multiTenantInterceptor(resolver *tenant.Resolver) grpc.UnaryServerInterceptor {
+	return func(
+		ctx context.Context,
+		req any,
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (any, error) {
+		md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			return nil, status.Error(codes.Unauthenticated, "missing metadata")
+		}
+		vals := md.Get("authorization")
+		if len(vals) == 0 || !strings.HasPrefix(vals[0], "Bearer ") {
+			return nil, status.Error(codes.Unauthenticated, "missing API key")
+		}
+		rawKey := vals[0][7:]
+
+		tenantID, err := resolver.Resolve(ctx, rawKey)
+		if err != nil {
+			return nil, status.Error(codes.Unauthenticated, "invalid API key")
+		}
+
+		ctx = tenant.WithTenantID(ctx, tenantID)
 		return handler(ctx, req)
 	}
 }

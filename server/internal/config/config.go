@@ -17,6 +17,8 @@ type ServerConfig struct {
 	GRPCPort int    `yaml:"grpc_port"`
 	HTTPPort int    `yaml:"http_port"`
 	APIKey   string `yaml:"api_key"`
+	AuthMode string `yaml:"auth_mode"` // "static" (default) | "multi_tenant"
+	AdminKey string `yaml:"admin_key"` // static admin key for admin API
 }
 
 type ClickHouseConfig struct {
@@ -40,6 +42,7 @@ func Default() *Config {
 		Server: ServerConfig{
 			GRPCPort: 4317,
 			HTTPPort: 8080,
+			AuthMode: "static",
 		},
 		ClickHouse: ClickHouseConfig{
 			Host:     "localhost",
@@ -122,5 +125,11 @@ func (c *Config) ApplyEnv() {
 
 	if v := os.Getenv("AXONIZE_API_KEY"); v != "" {
 		c.Server.APIKey = v
+	}
+	if v := os.Getenv("AXONIZE_AUTH_MODE"); v != "" {
+		c.Server.AuthMode = v
+	}
+	if v := os.Getenv("AXONIZE_ADMIN_KEY"); v != "" {
+		c.Server.AdminKey = v
 	}
 }

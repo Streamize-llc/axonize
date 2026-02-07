@@ -55,7 +55,7 @@ func (s *ClickHouseStore) InsertSpans(ctx context.Context, spans []SpanRecord) e
 	}
 
 	batch, err := s.conn.PrepareBatch(ctx, `INSERT INTO spans (
-		trace_id, span_id, parent_span_id,
+		tenant_id, trace_id, span_id, parent_span_id,
 		name, service_name, environment,
 		start_time, end_time, duration_ms,
 		model_name, model_version, inference_type,
@@ -89,6 +89,7 @@ func (s *ClickHouseStore) InsertSpans(ctx context.Context, spans []SpanRecord) e
 		if gpuPower == nil { gpuPower = []uint16{} }
 
 		if err := batch.Append(
+			span.TenantID,
 			span.TraceID, span.SpanID, span.ParentSpanID,
 			span.Name, span.ServiceName, span.Environment,
 			span.StartTime, span.EndTime, span.DurationMs,
@@ -123,7 +124,7 @@ func (s *ClickHouseStore) InsertGPUMetrics(ctx context.Context, spans []SpanReco
 	}
 
 	batch, err := s.conn.PrepareBatch(ctx, `INSERT INTO gpu_metrics (
-		timestamp, resource_uuid, physical_gpu_uuid, node_id,
+		tenant_id, timestamp, resource_uuid, physical_gpu_uuid, node_id,
 		utilization, memory_used_gb, memory_total_gb,
 		temperature_celsius, power_watts, clock_mhz,
 		active_spans
@@ -164,6 +165,7 @@ func (s *ClickHouseStore) InsertGPUMetrics(ctx context.Context, spans []SpanReco
 			}
 
 			if err := batch.Append(
+				span.TenantID,
 				span.StartTime, resourceUUID, physicalUUID, nodeID,
 				util, memUsed, memTotal,
 				temp, power, clock,
@@ -183,17 +185,18 @@ func (s *ClickHouseStore) InsertGPUMetrics(ctx context.Context, spans []SpanReco
 }
 
 // QueryGPUMetrics returns GPU metric time series for a given resource UUID.
-func (s *ClickHouseStore) QueryGPUMetrics(ctx context.Context, uuid string, start, end time.Time) ([]GPUMetricRow, error) {
+func (s *ClickHouseStore) QueryGPUMetrics(ctx context.Context, tenantID, uuid string, start, end time.Time) ([]GPUMetricRow, error) {
 	query := `
 		SELECT timestamp, resource_uuid, utilization, memory_used_gb, power_watts
 		FROM gpu_metrics
-		WHERE resource_uuid = ?
+		WHERE tenant_id = ?
+		  AND resource_uuid = ?
 		  AND timestamp >= ?
 		  AND timestamp <= ?
 		ORDER BY timestamp ASC
 	`
 
-	rows, err := s.conn.Query(ctx, query, uuid, start, end)
+	rows, err := s.conn.Query(ctx, query, tenantID, uuid, start, end)
 	if err != nil {
 		return nil, fmt.Errorf("query gpu metrics: %w", err)
 	}
@@ -211,7 +214,7 @@ func (s *ClickHouseStore) QueryGPUMetrics(ctx context.Context, uuid string, star
 }
 
 // QueryAnalyticsOverview returns aggregated analytics for the dashboard overview.
-func (s *ClickHouseStore) QueryAnalyticsOverview(ctx context.Context, start, end time.Time) (*AnalyticsOverview, error) {
+func (s *ClickHouseStore) QueryAnalyticsOverview(ctx context.Context, tenantID string, start, end time.Time) (*AnalyticsOverview, error) {
 	overview := &AnalyticsOverview{}
 
 	// 1. Summary stats
@@ -222,8 +225,8 @@ func (s *ClickHouseStore) QueryAnalyticsOverview(ctx context.Context, start, end
 			countIf(status = 'error') / greatest(count(), 1) AS error_rate,
 			count(DISTINCT arrayJoin(gpu_resource_uuids)) AS active_gpu_count
 		FROM spans
-		WHERE start_time >= ? AND start_time <= ?
-	`, start, end).Scan(
+		WHERE tenant_id = ? AND start_time >= ? AND start_time <= ?
+	`, tenantID, start, end).Scan(
 		&overview.TotalTraces,
 		&overview.AvgLatencyMs,
 		&overview.ErrorRate,
@@ -239,10 +242,10 @@ func (s *ClickHouseStore) QueryAnalyticsOverview(ctx context.Context, start, end
 			toStartOfHour(start_time) AS bucket,
 			count(DISTINCT trace_id) AS cnt
 		FROM spans
-		WHERE start_time >= ? AND start_time <= ?
+		WHERE tenant_id = ? AND start_time >= ? AND start_time <= ?
 		GROUP BY bucket
 		ORDER BY bucket ASC
-	`, start, end)
+	`, tenantID, start, end)
 	if err != nil {
 		return nil, fmt.Errorf("analytics throughput: %w", err)
 	}
@@ -264,10 +267,10 @@ func (s *ClickHouseStore) QueryAnalyticsOverview(ctx context.Context, start, end
 			quantile(0.95)(duration_ms) AS p95,
 			quantile(0.99)(duration_ms) AS p99
 		FROM spans
-		WHERE start_time >= ? AND start_time <= ?
+		WHERE tenant_id = ? AND start_time >= ? AND start_time <= ?
 		GROUP BY bucket
 		ORDER BY bucket ASC
-	`, start, end)
+	`, tenantID, start, end)
 	if err != nil {
 		return nil, fmt.Errorf("analytics latency: %w", err)
 	}
@@ -294,9 +297,9 @@ func (s *ClickHouseStore) QueryAnalyticsOverview(ctx context.Context, start, end
 
 // QueryTraces returns a paginated list of trace summaries.
 func (s *ClickHouseStore) QueryTraces(ctx context.Context, f TraceFilter) ([]TraceSummary, int, error) {
-	// Build WHERE clause
-	where := "WHERE 1=1"
-	args := make([]interface{}, 0)
+	// Build WHERE clause — tenant_id is always required
+	where := "WHERE tenant_id = ?"
+	args := []interface{}{f.TenantID}
 
 	if f.ServiceName != nil {
 		where += " AND service_name = ?"
@@ -360,16 +363,16 @@ func (s *ClickHouseStore) QueryTraces(ctx context.Context, f TraceFilter) ([]Tra
 }
 
 // QueryTraceByID returns the full detail of a single trace, including a span tree.
-func (s *ClickHouseStore) QueryTraceByID(ctx context.Context, traceID string) (*TraceDetail, error) {
+func (s *ClickHouseStore) QueryTraceByID(ctx context.Context, tenantID string, traceID string) (*TraceDetail, error) {
 	query := `
 		SELECT span_id, parent_span_id, name, start_time, end_time, duration_ms,
 		       status, error_message, attributes
 		FROM spans
-		WHERE trace_id = ?
+		WHERE tenant_id = ? AND trace_id = ?
 		ORDER BY start_time ASC
 	`
 
-	rows, err := s.conn.Query(ctx, query, traceID)
+	rows, err := s.conn.Query(ctx, query, tenantID, traceID)
 	if err != nil {
 		return nil, fmt.Errorf("query trace spans: %w", err)
 	}

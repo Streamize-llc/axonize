@@ -7,21 +7,24 @@ import (
 	"time"
 
 	"github.com/axonize/server/internal/store"
+	"github.com/axonize/server/internal/tenant"
 )
 
 // TraceQuerier is the interface for trace queries.
 type TraceQuerier interface {
 	QueryTraces(ctx context.Context, f store.TraceFilter) ([]store.TraceSummary, int, error)
-	QueryTraceByID(ctx context.Context, traceID string) (*store.TraceDetail, error)
+	QueryTraceByID(ctx context.Context, tenantID string, traceID string) (*store.TraceDetail, error)
 }
 
 func handleListTraces(querier TraceQuerier) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
+		tenantID := tenant.FromContext(r.Context())
 
 		filter := store.TraceFilter{
-			Limit:  50,
-			Offset: 0,
+			TenantID: tenantID,
+			Limit:    50,
+			Offset:   0,
 		}
 
 		if v := q.Get("service_name"); v != "" {
@@ -74,7 +77,8 @@ func handleGetTrace(querier TraceQuerier) http.HandlerFunc {
 			return
 		}
 
-		detail, err := querier.QueryTraceByID(r.Context(), traceID)
+		tenantID := tenant.FromContext(r.Context())
+		detail, err := querier.QueryTraceByID(r.Context(), tenantID, traceID)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
