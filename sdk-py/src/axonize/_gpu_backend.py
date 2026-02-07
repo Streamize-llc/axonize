@@ -8,7 +8,11 @@ from typing import Any, Protocol, runtime_checkable
 
 @dataclass
 class _GPUSnapshot:
-    """Mutable metric snapshot updated by the collection thread."""
+    """Mutable metric snapshot updated by the collection thread.
+
+    A value of 0 means the metric is not available for the current backend
+    (e.g. Apple Silicon cannot report memory_used_gb, temperature, or clock).
+    """
 
     memory_used_gb: float
     utilization: float

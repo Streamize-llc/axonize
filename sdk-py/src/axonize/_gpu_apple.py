@@ -326,6 +326,9 @@ class AppleSiliconBackend:
         self._node_id = platform.node()
 
         # Generate deterministic UUID: APPLE-{sha256(chip+hostname)[:12]}
+        # WARNING: UUID changes if hostname changes (e.g. DHCP rename).
+        # For stable identity in dynamic environments, consider an external
+        # machine-id source in the future.
         hash_input = f"{self._chip_model}:{self._node_id}"
         self._gpu_uuid = "APPLE-" + hashlib.sha256(hash_input.encode()).hexdigest()[:12]
 

@@ -144,10 +144,14 @@ class OTLPExporter:
         *,
         insecure: bool = True,
         timeout_s: float = 10.0,
+        api_key: str | None = None,
     ) -> None:
         self._service_name = service_name
         self._environment = environment
         self._timeout_s = timeout_s
+        self._metadata: list[tuple[str, str]] | None = None
+        if api_key is not None:
+            self._metadata = [("authorization", f"Bearer {api_key}")]
 
         if insecure:
             self._channel = grpc.insecure_channel(endpoint)
@@ -164,7 +168,7 @@ class OTLPExporter:
             request = _build_export_request(
                 spans, self._service_name, self._environment
             )
-            self._stub.Export(request, timeout=self._timeout_s)
+            self._stub.Export(request, timeout=self._timeout_s, metadata=self._metadata)
         except Exception:  # noqa: BLE001
             logger.debug("Failed to export %d spans", len(spans), exc_info=True)
 

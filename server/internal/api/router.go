@@ -1,6 +1,9 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 // Store combines all query interfaces needed by the API (ClickHouse).
 type Store interface {
@@ -16,7 +19,7 @@ type GPUStore interface {
 }
 
 // NewRouter creates the HTTP router with all API endpoints.
-func NewRouter(s Store, gpuStore GPUStore) http.Handler {
+func NewRouter(s Store, gpuStore GPUStore, apiKey string) http.Handler {
 	mux := http.NewServeMux()
 
 	// Health
@@ -35,14 +38,37 @@ func NewRouter(s Store, gpuStore GPUStore) http.Handler {
 	// Analytics
 	mux.HandleFunc("GET /api/v1/analytics/overview", handleAnalyticsOverview(s))
 
-	return corsMiddleware(mux)
+	var handler http.Handler = mux
+	if apiKey != "" {
+		handler = apiKeyMiddleware(handler, apiKey)
+	}
+	return corsMiddleware(handler)
+}
+
+// apiKeyMiddleware validates the Authorization: Bearer <key> header.
+// Health endpoints (/healthz, /readyz) are exempt.
+func apiKeyMiddleware(next http.Handler, apiKey string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "Bearer ") || auth[7:] != apiKey {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

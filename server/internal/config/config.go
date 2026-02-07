@@ -14,8 +14,9 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	GRPCPort int `yaml:"grpc_port"`
-	HTTPPort int `yaml:"http_port"`
+	GRPCPort int    `yaml:"grpc_port"`
+	HTTPPort int    `yaml:"http_port"`
+	APIKey   string `yaml:"api_key"`
 }
 
 type ClickHouseConfig struct {
@@ -117,5 +118,9 @@ func (c *Config) ApplyEnv() {
 	}
 	if v := os.Getenv("POSTGRES_PASSWORD"); v != "" {
 		c.PostgreSQL.Password = v
+	}
+
+	if v := os.Getenv("AXONIZE_API_KEY"); v != "" {
+		c.Server.APIKey = v
 	}
 }

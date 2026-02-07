@@ -18,3 +18,4 @@ class AxonizeConfig:
     sampling_rate: float = 1.0
     gpu_profiling: bool = False
     gpu_snapshot_interval_ms: int = 100
+    api_key: str | None = None

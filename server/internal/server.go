@@ -8,11 +8,15 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	collectorpb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"github.com/axonize/server/internal/api"
 	"github.com/axonize/server/internal/config"
@@ -45,9 +49,13 @@ func NewServer(cfg *config.Config, logger *slog.Logger) (*Server, error) {
 	}
 
 	handler := ingest.NewHandler(chStore, pgStore, logger)
-	router := api.NewRouter(chStore, pgStore)
+	router := api.NewRouter(chStore, pgStore, cfg.Server.APIKey)
 
-	grpcSrv := grpc.NewServer()
+	var grpcOpts []grpc.ServerOption
+	if cfg.Server.APIKey != "" {
+		grpcOpts = append(grpcOpts, grpc.UnaryInterceptor(apiKeyInterceptor(cfg.Server.APIKey)))
+	}
+	grpcSrv := grpc.NewServer(grpcOpts...)
 	collectorpb.RegisterTraceServiceServer(grpcSrv, handler)
 
 	httpSrv := &http.Server{
@@ -132,4 +140,26 @@ func (s *Server) Shutdown() error {
 
 	s.logger.Info("shutdown complete")
 	return nil
+}
+
+// apiKeyInterceptor returns a gRPC unary interceptor that validates
+// the "authorization" metadata key against "Bearer <apiKey>".
+func apiKeyInterceptor(apiKey string) grpc.UnaryServerInterceptor {
+	expected := "Bearer " + apiKey
+	return func(
+		ctx context.Context,
+		req any,
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (any, error) {
+		md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			return nil, status.Error(codes.Unauthenticated, "missing metadata")
+		}
+		vals := md.Get("authorization")
+		if len(vals) == 0 || !strings.EqualFold(vals[0], expected) {
+			return nil, status.Error(codes.Unauthenticated, "invalid API key")
+		}
+		return handler(ctx, req)
+	}
 }

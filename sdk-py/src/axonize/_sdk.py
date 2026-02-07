@@ -34,6 +34,7 @@ class _AxonizeSDK:
             endpoint=self.config.endpoint,
             service_name=self.config.service_name,
             environment=self.config.environment,
+            api_key=self.config.api_key,
         )
         self._processor = BackgroundProcessor(
             self._buffer,
@@ -146,6 +147,7 @@ def init(
     buffer_size: int = 8192,
     sampling_rate: float = 1.0,
     gpu_profiling: bool = False,
+    api_key: str | None = None,
 ) -> None:
     """Initialize the Axonize SDK.
 
@@ -165,6 +167,7 @@ def init(
         buffer_size=buffer_size,
         sampling_rate=sampling_rate,
         gpu_profiling=gpu_profiling,
+        api_key=api_key,
     )
     _sdk_instance = _AxonizeSDK(config)
     _sdk_instance.start()

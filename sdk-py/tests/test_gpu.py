@@ -173,6 +173,109 @@ class TestSpanSetGpusWithProfiler:
             sdk_mod._sdk_instance = original
 
 
+class TestFactoryFallthrough:
+    def test_nvidia_fails_apple_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When NVIDIA is unavailable, factory falls through to Apple backend."""
+        import types
+
+        import axonize._gpu_nvml as nvml_mod
+        from axonize._gpu import GPUProfiler, create_gpu_profiler
+        from axonize._gpu_backend import DiscoveredGPU, _GPUSnapshot
+
+        monkeypatch.setattr(nvml_mod, "_HAS_PYNVML", False)
+
+        class _FakeAppleBackend:
+            vendor = "Apple"
+
+            def discover(self) -> list[DiscoveredGPU]:
+                return [DiscoveredGPU(
+                    resource_uuid="APPLE-fake12",
+                    physical_gpu_uuid="APPLE-fake12",
+                    resource_type="full_gpu",
+                    label="mps:0",
+                    model="Apple M3 Max",
+                    vendor="Apple",
+                    node_id="test-node",
+                    memory_total_gb=36.0,
+                    handle=None,
+                )]
+
+            def collect(self, handle: object) -> _GPUSnapshot:
+                return _GPUSnapshot(
+                    memory_used_gb=0.0,
+                    utilization=42.0,
+                    temperature_celsius=0,
+                    power_watts=8,
+                    clock_mhz=0,
+                )
+
+            def shutdown(self) -> None:
+                pass
+
+        fake_mod = types.ModuleType("axonize._gpu_apple")
+        fake_mod.AppleSiliconBackend = _FakeAppleBackend  # type: ignore[attr-defined]
+        monkeypatch.setitem(__import__("sys").modules, "axonize._gpu_apple", fake_mod)
+        monkeypatch.setattr("axonize._gpu.sys", type("FakeSys", (), {"platform": "darwin"})())
+
+        profiler = create_gpu_profiler()
+        assert profiler is not None
+        assert isinstance(profiler, GPUProfiler)
+
+        result = profiler.resolve_labels(["mps:0"])
+        assert len(result) == 1
+        assert result[0].vendor == "Apple"
+
+
+class TestCollectionLoopErrorRecovery:
+    def test_recovers_after_error(self) -> None:
+        """Backend that fails once then succeeds — profiler should recover."""
+        from axonize._gpu import GPUProfiler
+        from axonize._gpu_backend import DiscoveredGPU, _GPUSnapshot
+
+        class _FlakeyBackend:
+            vendor = "Test"
+            _call_count = 0
+
+            def discover(self) -> list[DiscoveredGPU]:
+                return [DiscoveredGPU(
+                    resource_uuid="GPU-FLAKE",
+                    physical_gpu_uuid="GPU-FLAKE",
+                    resource_type="full_gpu",
+                    label="cuda:0",
+                    model="Test GPU",
+                    vendor="Test",
+                    node_id="test-node",
+                    memory_total_gb=16.0,
+                    handle="h0",
+                )]
+
+            def collect(self, handle: object) -> _GPUSnapshot:
+                self._call_count += 1
+                if self._call_count == 1:
+                    raise RuntimeError("transient failure")
+                return _GPUSnapshot(
+                    memory_used_gb=8.0,
+                    utilization=75.0,
+                    temperature_celsius=65,
+                    power_watts=200,
+                    clock_mhz=1500,
+                )
+
+            def shutdown(self) -> None:
+                pass
+
+        profiler = GPUProfiler(backend=_FlakeyBackend(), snapshot_interval_ms=50)
+        profiler.start()
+        try:
+            time.sleep(0.25)
+            result = profiler.resolve_labels(["cuda:0"])
+            assert len(result) == 1
+            assert result[0].utilization == 75.0
+            assert result[0].memory_used_gb == 8.0
+        finally:
+            profiler.stop()
+
+
 class TestOverheadBenchmark:
     def test_resolve_labels_fast(self) -> None:
         profiler = MockGPUProfiler(num_gpus=4)

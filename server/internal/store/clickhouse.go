@@ -61,7 +61,7 @@ func (s *ClickHouseStore) InsertSpans(ctx context.Context, spans []SpanRecord) e
 		model_name, model_version, inference_type,
 		tokens_input, tokens_output, tokens_per_second, ttft_ms,
 		diffusion_steps, cfg_scale,
-		gpu_resource_uuids, gpu_physical_uuids, gpu_models, gpu_node_ids,
+		gpu_resource_uuids, gpu_physical_uuids, gpu_models, gpu_vendors, gpu_node_ids,
 		gpu_memory_used_gb, gpu_utilization, gpu_power_watts,
 		cost_usd, status, error_message, attributes
 	)`)
@@ -77,6 +77,8 @@ func (s *ClickHouseStore) InsertSpans(ctx context.Context, spans []SpanRecord) e
 		if gpuPhysUUIDs == nil { gpuPhysUUIDs = []string{} }
 		gpuModels := span.GpuModels
 		if gpuModels == nil { gpuModels = []string{} }
+		gpuVendors := span.GpuVendors
+		if gpuVendors == nil { gpuVendors = []string{} }
 		gpuNodeIDs := span.GpuNodeIDs
 		if gpuNodeIDs == nil { gpuNodeIDs = []string{} }
 		gpuMemUsed := span.GpuMemoryUsedGB
@@ -93,7 +95,7 @@ func (s *ClickHouseStore) InsertSpans(ctx context.Context, spans []SpanRecord) e
 			span.ModelName, span.ModelVersion, span.InferenceType,
 			span.TokensInput, span.TokensOutput, span.TokensPerSecond, span.TtftMs,
 			span.DiffusionSteps, span.CfgScale,
-			gpuResUUIDs, gpuPhysUUIDs, gpuModels, gpuNodeIDs,
+			gpuResUUIDs, gpuPhysUUIDs, gpuModels, gpuVendors, gpuNodeIDs,
 			gpuMemUsed, gpuUtil, gpuPower,
 			span.CostUSD, span.Status, span.ErrorMessage, span.Attributes,
 		); err != nil {

@@ -25,7 +25,42 @@ class _GPUStaticInfo:
     memory_total_gb: float
 
 
-class GPUProfiler:
+class _GPUResolverMixin:
+    """Shared resolve_labels() logic for GPUProfiler and MockGPUProfiler."""
+
+    _label_to_resource: dict[str, str]
+    _snapshots: dict[str, _GPUSnapshot]
+    _gpu_info: dict[str, _GPUStaticInfo]
+
+    def resolve_labels(self, labels: list[str]) -> list[GPUAttribution]:
+        result: list[GPUAttribution] = []
+        for label in labels:
+            resource_uuid = self._label_to_resource.get(label)
+            if resource_uuid is None:
+                continue
+            snapshot = self._snapshots.get(resource_uuid)
+            info = self._gpu_info.get(resource_uuid)
+            if snapshot is None or info is None:
+                continue
+            result.append(GPUAttribution(
+                resource_uuid=resource_uuid,
+                physical_gpu_uuid=info.physical_gpu_uuid,
+                gpu_model=info.model,
+                vendor=info.vendor,
+                node_id=info.node_id,
+                resource_type=info.resource_type,
+                user_label=label,
+                memory_used_gb=snapshot.memory_used_gb,
+                memory_total_gb=info.memory_total_gb,
+                utilization=snapshot.utilization,
+                temperature_celsius=snapshot.temperature_celsius,
+                power_watts=snapshot.power_watts,
+                clock_mhz=snapshot.clock_mhz,
+            ))
+        return result
+
+
+class GPUProfiler(_GPUResolverMixin):
     """Real GPU profiler using a pluggable backend.
 
     Discovers GPUs at init, collects metrics in a daemon thread.
@@ -84,39 +119,16 @@ class GPUProfiler:
         while not self._stop_event.wait(self._interval_s):
             for resource_uuid, handle in self._handles.items():
                 try:
+                    # CPython GIL guarantees dict.__setitem__ is atomic for
+                    # reader threads calling resolve_labels() concurrently.
                     self._snapshots[resource_uuid] = self._backend.collect(handle)
-                except Exception:  # noqa: BLE001
-                    pass
-
-    def resolve_labels(self, labels: list[str]) -> list[GPUAttribution]:
-        result: list[GPUAttribution] = []
-        for label in labels:
-            resource_uuid = self._label_to_resource.get(label)
-            if resource_uuid is None:
-                continue
-            snapshot = self._snapshots.get(resource_uuid)
-            info = self._gpu_info.get(resource_uuid)
-            if snapshot is None or info is None:
-                continue
-            result.append(GPUAttribution(
-                resource_uuid=resource_uuid,
-                physical_gpu_uuid=info.physical_gpu_uuid,
-                gpu_model=info.model,
-                vendor=info.vendor,
-                node_id=info.node_id,
-                resource_type=info.resource_type,
-                user_label=label,
-                memory_used_gb=snapshot.memory_used_gb,
-                memory_total_gb=info.memory_total_gb,
-                utilization=snapshot.utilization,
-                temperature_celsius=snapshot.temperature_celsius,
-                power_watts=snapshot.power_watts,
-                clock_mhz=snapshot.clock_mhz,
-            ))
-        return result
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug(
+                        "GPU collect failed for %s: %s", resource_uuid, exc, exc_info=True,
+                    )
 
 
-class MockGPUProfiler:
+class MockGPUProfiler(_GPUResolverMixin):
     """Test-only profiler that simulates GPU discovery and metrics without a real backend."""
 
     def __init__(
@@ -186,33 +198,6 @@ class MockGPUProfiler:
 
     def stop(self) -> None:
         pass
-
-    def resolve_labels(self, labels: list[str]) -> list[GPUAttribution]:
-        result: list[GPUAttribution] = []
-        for label in labels:
-            resource_uuid = self._label_to_resource.get(label)
-            if resource_uuid is None:
-                continue
-            snapshot = self._snapshots.get(resource_uuid)
-            info = self._gpu_info.get(resource_uuid)
-            if snapshot is None or info is None:
-                continue
-            result.append(GPUAttribution(
-                resource_uuid=resource_uuid,
-                physical_gpu_uuid=info.physical_gpu_uuid,
-                gpu_model=info.model,
-                vendor=info.vendor,
-                node_id=info.node_id,
-                resource_type=info.resource_type,
-                user_label=label,
-                memory_used_gb=snapshot.memory_used_gb,
-                memory_total_gb=info.memory_total_gb,
-                utilization=snapshot.utilization,
-                temperature_celsius=snapshot.temperature_celsius,
-                power_watts=snapshot.power_watts,
-                clock_mhz=snapshot.clock_mhz,
-            ))
-        return result
 
 
 def create_gpu_profiler(

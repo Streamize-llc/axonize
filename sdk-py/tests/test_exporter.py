@@ -277,6 +277,74 @@ class TestOTLPExporter:
         exporter.shutdown()  # Should not raise
 
 
+class TestExporterAPIKeyMetadata:
+    def test_export_with_api_key_metadata(self) -> None:
+        """When api_key is set, metadata is passed to gRPC calls."""
+        received_metadata: list[tuple[str, str]] = []
+
+        class _MetadataCapture(TraceServiceServicer):
+            def Export(  # noqa: N802
+                self,
+                request: ExportTraceServiceRequest,
+                context: grpc.ServicerContext,
+            ) -> ExportTraceServiceResponse:
+                for key, value in context.invocation_metadata():
+                    if key == "authorization":
+                        received_metadata.append((key, value))
+                return ExportTraceServiceResponse()
+
+        servicer = _MetadataCapture()
+        server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
+        add_TraceServiceServicer_to_server(servicer, server)
+        port = server.add_insecure_port("localhost:0")
+        server.start()
+
+        try:
+            exporter = OTLPExporter(
+                f"localhost:{port}", "test-svc", "dev",
+                timeout_s=5.0, api_key="test-secret-key",
+            )
+            exporter.export([_make_span_data()])
+            exporter.shutdown()
+
+            assert len(received_metadata) == 1
+            assert received_metadata[0] == ("authorization", "Bearer test-secret-key")
+        finally:
+            server.stop(grace=1)
+
+    def test_export_without_api_key_no_auth_header(self) -> None:
+        """When api_key is None, no authorization metadata is sent."""
+        received_metadata: list[tuple[str, str]] = []
+
+        class _MetadataCapture(TraceServiceServicer):
+            def Export(  # noqa: N802
+                self,
+                request: ExportTraceServiceRequest,
+                context: grpc.ServicerContext,
+            ) -> ExportTraceServiceResponse:
+                for key, value in context.invocation_metadata():
+                    if key == "authorization":
+                        received_metadata.append((key, value))
+                return ExportTraceServiceResponse()
+
+        servicer = _MetadataCapture()
+        server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
+        add_TraceServiceServicer_to_server(servicer, server)
+        port = server.add_insecure_port("localhost:0")
+        server.start()
+
+        try:
+            exporter = OTLPExporter(
+                f"localhost:{port}", "test-svc", "dev", timeout_s=5.0,
+            )
+            exporter.export([_make_span_data()])
+            exporter.shutdown()
+
+            assert len(received_metadata) == 0
+        finally:
+            server.stop(grace=1)
+
+
 class _CollectorServicer(TraceServiceServicer):
     """In-process gRPC servicer that collects ExportTraceServiceRequests."""
 
