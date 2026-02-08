@@ -7,9 +7,13 @@
 Initialize the Axonize SDK. Must be called before creating any spans.
 
 ```python
+import os
+import axonize
+
 axonize.init(
     endpoint="localhost:4317",
     service_name="my-service",
+    api_key=os.getenv("AXONIZE_API_KEY"),  # Required if server has authentication enabled
     environment="production",
     gpu_profiling=True,
     batch_size=512,
@@ -18,6 +22,20 @@ axonize.init(
     sampling_rate=1.0,
 )
 ```
+
+**Parameters:**
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `endpoint` | `str` | ✅ | - | gRPC server address (`host:port`) |
+| `service_name` | `str` | ✅ | - | Service identifier |
+| `api_key` | `str \| None` | ⚠️ | `None` | Authentication key. Required if server has `AXONIZE_API_KEY` set |
+| `environment` | `str` | ❌ | `"development"` | Environment tag (e.g., "production", "staging") |
+| `gpu_profiling` | `bool` | ❌ | `False` | Enable GPU profiling (auto-detects NVIDIA or Apple Silicon) |
+| `batch_size` | `int` | ❌ | `512` | Number of spans per export batch |
+| `flush_interval_ms` | `int` | ❌ | `5000` | Maximum milliseconds between flushes |
+| `buffer_size` | `int` | ❌ | `8192` | Ring buffer capacity (max spans before blocking) |
+| `sampling_rate` | `float` | ❌ | `1.0` | Fraction of spans to keep (0.0 = drop all, 1.0 = keep all) |
 
 ### `axonize.shutdown() -> None`
 
@@ -28,8 +46,11 @@ Shut down the SDK, flushing all remaining spans. Automatically registered with `
 Create a general-purpose span context manager.
 
 ```python
+import axonize
+
 with axonize.span("operation") as s:
     s.set_attribute("key", "value")
+    s.set_gpus(["cuda:0"])  # Optional: attach GPU metrics
 ```
 
 ### `axonize.llm_span(name, *, model=None, model_version=None, inference_type="llm", kind=SpanKind.SERVER) -> LLMSpan`
@@ -37,10 +58,14 @@ with axonize.span("operation") as s:
 Create an LLM-specialized span with token tracking.
 
 ```python
-with axonize.llm_span("generate", model="llama-3") as s:
+import axonize
+
+with axonize.llm_span("generate", model="llama-3-70b") as s:
     s.set_tokens_input(128)
+    s.set_gpus(["cuda:0", "cuda:1"])  # Multi-GPU inference
     for token in stream:
         s.record_token()
+    # Automatically calculates TTFT, tokens/sec, token count
 ```
 
 ### `@axonize.trace`
@@ -48,13 +73,18 @@ with axonize.llm_span("generate", model="llama-3") as s:
 Decorator to wrap a function in a span.
 
 ```python
+import axonize
+
 @axonize.trace
 def my_function():
-    pass
+    # Span name defaults to "my_function"
+    result = do_inference()
+    return result
 
 @axonize.trace(name="custom-name")
-def another_function():
-    pass
+def another_function(x, y):
+    # Span name is "custom-name"
+    return x + y
 ```
 
 ---
