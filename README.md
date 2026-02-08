@@ -6,12 +6,13 @@ Axonize sits between infrastructure monitoring (Grafana/Prometheus) and LLM serv
 
 ## Key Features
 
-- **Sub-microsecond overhead** — Lock-free ring buffer keeps tracing off the critical path
-- **GPU Attribution** — Automatic pynvml profiling with 3-layer identity (Physical GPU -> Compute Resource -> Runtime Context)
+- **Low-overhead tracing** — Lock-free ring buffer designed for <1μs overhead per span
+- **Multi-vendor GPU support** — Auto-detects NVIDIA (via pynvml) and Apple Silicon (via IOKit)
+- **3-layer GPU identity** — Physical GPU → Compute Resource → Runtime Context (MIG-aware)
 - **LLM Metrics** — TTFT, tokens/sec, and token-level streaming tracking out of the box
-- **MIG Support** — Disambiguate "cuda:0" across pods and MIG partitions
 - **OpenTelemetry Compatible** — OTLP export with `ai.*`, `gpu.*`, `cost.*` semantic conventions
 - **Full-stack Dashboard** — Trace timeline (Gantt), GPU monitoring, latency analytics
+- **Multi-tenant ready** — API key authentication and usage tracking for cloud deployments
 
 ## Architecture
 
@@ -34,38 +35,62 @@ Python SDK (axonize)          Go Server              Databases
 ### 1. Start the server
 
 ```bash
-git clone https://github.com/your-org/axonize.git
+git clone https://github.com/Streamize-llc/axonize.git
 cd axonize
 
 # Start ClickHouse + PostgreSQL + Server + Dashboard
 docker compose up -d
 
-# Apply database migrations
+# Apply database migrations (waits for databases to be ready)
 make migrate
 ```
 
 The dashboard is available at `http://localhost:3000`.
 
-### 2. Install the SDK
+### 2. Set up authentication
+
+The server generates a default API key on first startup. Get it from the logs:
 
 ```bash
-pip install axonize
+docker compose logs axonize-server | grep "API key"
+# Output: Generated API key: axon_...
 ```
 
-### 3. Instrument your code
+Or set your own key in `.env`:
+
+```bash
+AXONIZE_API_KEY=your-secret-key
+```
+
+### 3. Install the SDK
+
+```bash
+# Basic installation (includes Apple Silicon GPU support)
+pip install axonize
+
+# For NVIDIA GPUs (requires CUDA drivers)
+pip install axonize[nvidia]
+
+# All optional dependencies
+pip install axonize[all]
+```
+
+### 4. Instrument your code
 
 ```python
+import os
 import axonize
 
 axonize.init(
     endpoint="localhost:4317",
     service_name="my-inference-service",
+    api_key=os.getenv("AXONIZE_API_KEY"),  # Required for authentication
 )
 
 # Basic span
 with axonize.span("image-generation") as s:
     s.set_attribute("ai.model.name", "stable-diffusion-xl")
-    s.set_gpus(["cuda:0"])
+    s.set_gpus(["cuda:0"])  # or ["mps:0"] for Apple Silicon
     result = model.generate(prompt)
 
 # LLM span with streaming token tracking
@@ -79,7 +104,7 @@ with axonize.llm_span("generate", model="llama-3-70b") as s:
 axonize.shutdown()
 ```
 
-### 4. View traces
+### 5. View traces
 
 Open `http://localhost:3000` to see your traces, GPU metrics, and performance analytics.
 
@@ -91,10 +116,12 @@ Open `http://localhost:3000` to see your traces, GPU metrics, and performance an
 axonize.init(
     endpoint="localhost:4317",     # gRPC endpoint
     service_name="my-service",     # Service identifier
+    api_key="your-api-key",        # Authentication (required if server has AXONIZE_API_KEY set)
     environment="production",      # Environment tag
-    gpu_profiling=True,            # Enable pynvml GPU profiling
+    gpu_profiling=True,            # Enable GPU profiling (auto-detects vendor)
     batch_size=512,                # Spans per export batch
     flush_interval_ms=5000,        # Max time between flushes
+    sampling_rate=1.0,             # Fraction of spans to keep (0.0-1.0)
 )
 ```
 
@@ -136,41 +163,97 @@ with axonize.llm_span("generate", model="llama-3-70b") as s:
 ### GPU Profiling
 
 When `gpu_profiling=True`, the SDK automatically:
-1. Discovers GPUs via pynvml (including MIG instances)
-2. Collects metrics every 100ms in a background thread
-3. Attaches GPU attribution when you call `span.set_gpus()`
+1. **Auto-detects GPU backend**: NVIDIA (pynvml) or Apple Silicon (IOKit)
+2. Discovers available GPUs (including NVIDIA MIG instances)
+3. Collects metrics every 100ms in a background thread (utilization, memory, power, temperature)
+4. Attaches GPU attribution when you call `span.set_gpus()`
+
+**Device labels**:
+- NVIDIA: `cuda:0`, `cuda:1`, etc.
+- Apple Silicon: `mps:0`
+
+**Installation**:
+- Apple Silicon support is built-in (no extra dependencies)
+- NVIDIA requires: `pip install axonize[nvidia]` (installs pynvml)
 
 ```python
 axonize.init(endpoint="...", service_name="...", gpu_profiling=True)
 
 with axonize.span("inference") as s:
+    # NVIDIA
     s.set_gpus(["cuda:0"])
+
+    # Apple Silicon
+    # s.set_gpus(["mps:0"])
+
     # GPU metrics (utilization, memory, power, temp) are
-    # automatically attached to this span
+    # automatically attached to this span with vendor-specific values
 ```
 
 ## Server Endpoints
 
+**Authentication**: All `/api/v1/*` endpoints require Bearer token authentication (except health checks):
+
+```bash
+curl -H "Authorization: Bearer <your-api-key>" \
+  http://localhost:8080/api/v1/traces
+```
+
+### Public Endpoints
+
 | Endpoint | Description |
 |----------|-------------|
-| `GET /healthz` | Health check |
-| `GET /readyz` | Readiness check (DB connectivity) |
+| `GET /healthz` | Health check (no auth) |
+| `GET /readyz` | Readiness check - DB connectivity (no auth) |
+
+### Query API (requires API key)
+
+| Endpoint | Description |
+|----------|-------------|
 | `GET /api/v1/traces` | List traces (filterable, paginated) |
 | `GET /api/v1/traces/{id}` | Trace detail with span tree |
 | `GET /api/v1/gpus` | GPU registry list |
 | `GET /api/v1/gpus/{uuid}` | GPU detail |
 | `GET /api/v1/gpus/{uuid}/metrics` | GPU metric time series |
-| `GET /api/v1/analytics/overview` | Dashboard analytics |
-| `POST /api/v1/admin/tenants` | Create tenant (admin key required) |
-| `GET /api/v1/admin/tenants` | List tenants (admin key required) |
+| `GET /api/v1/analytics/overview` | Dashboard analytics (throughput, latency, errors) |
+
+### Admin API (requires admin key, multi-tenant mode only)
+
+Available when `AXONIZE_AUTH_MODE=multi_tenant`. Requires `Authorization: Bearer <AXONIZE_ADMIN_KEY>`.
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/v1/admin/tenants` | Create new tenant |
+| `GET /api/v1/admin/tenants` | List all tenants |
 | `POST /api/v1/admin/tenants/{id}/keys` | Create API key for tenant |
-| `DELETE /api/v1/admin/tenants/{id}/keys/{prefix}` | Revoke API key (admin key required) |
-| `GET /api/v1/admin/tenants/{id}/usage` | Tenant usage (spans + GPU seconds) |
+| `DELETE /api/v1/admin/tenants/{id}/keys/{prefix}` | Revoke API key |
+| `GET /api/v1/admin/tenants/{id}/usage` | Get tenant usage (spans + GPU seconds) |
+
+See [`docs/server-deployment.md`](docs/server-deployment.md) for multi-tenant setup and billing integration.
+
+## Configuration
+
+All server configuration is via environment variables. See [`.env.example`](.env.example) for full reference. Key variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AXONIZE_API_KEY` | (generated) | Static API key for single-tenant mode |
+| `AXONIZE_AUTH_MODE` | `static` | `static` (single tenant) or `multi_tenant` |
+| `AXONIZE_ADMIN_KEY` | (none) | Admin API key (multi-tenant mode only) |
+| `CLICKHOUSE_HOST` | `clickhouse` | ClickHouse host |
+| `POSTGRES_HOST` | `postgres` | PostgreSQL host |
+| `GRPC_PORT` | `4317` | gRPC ingest port |
+| `HTTP_PORT` | `8080` | HTTP API port |
+
+**Data retention** (ClickHouse TTL):
+- Spans: 30 days
+- Traces: 90 days
+- GPU metrics: 7 days
 
 ## Development
 
 ```bash
-# Start dev databases
+# Start dev databases (ClickHouse + PostgreSQL only)
 make dev
 
 # Run SDK tests
@@ -179,7 +262,7 @@ make test-sdk
 # Run all linters
 make lint
 
-# Start dashboard dev server
+# Start dashboard dev server (hot-reload on port 3000)
 make dev-dashboard
 
 # Run E2E tests (requires full stack)
@@ -187,6 +270,8 @@ make dev-all && make migrate && make test-e2e
 ```
 
 ## Examples
+
+**Prerequisites**: All examples require the server to be running (`docker compose up -d && make migrate`).
 
 See the [`examples/`](examples/) directory for integration guides:
 
@@ -200,13 +285,21 @@ See the [`examples/`](examples/) directory for integration guides:
 
 ```
 axonize/
-├── sdk-py/          Python SDK (pip install axonize)
-├── server/          Go ingest + query server
-├── dashboard/       React dashboard
-├── migrations/      ClickHouse + PostgreSQL schemas
-├── examples/        Integration examples
-├── tests/           E2E tests
-└── docs/            Documentation
+├── sdk-py/                    Python SDK (pip install axonize)
+├── server/                    Go ingest + query server
+│   ├── internal/ingest/       OTLP gRPC handler
+│   ├── internal/api/          REST API endpoints
+│   ├── internal/store/        ClickHouse + PostgreSQL stores
+│   └── internal/tenant/       Multi-tenant auth + usage tracking
+├── dashboard/                 React + Vite dashboard
+├── migrations/                Database schemas
+│   ├── clickhouse/            Spans, traces, gpu_metrics tables
+│   └── postgres/              GPU registry + tenant management
+├── examples/                  Integration examples
+├── tests/                     E2E + load tests
+├── docs/                      Documentation
+├── .env.example               Configuration reference
+└── config.yaml                Server config (overridden by env vars)
 ```
 
 ## License
