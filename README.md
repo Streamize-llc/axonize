@@ -302,6 +302,14 @@ axonize/
 └── config.yaml                Server config (overridden by env vars)
 ```
 
+## Documentation
+
+- [Getting Started](docs/getting-started.md) — Step-by-step setup guide
+- [SDK API Reference](docs/sdk-reference.md) — Complete SDK documentation
+- [Server Deployment](docs/server-deployment.md) — Production deployment guide
+- [Troubleshooting](docs/troubleshooting.md) — Common issues and solutions
+- [Architecture](ARCHITECTURE.md) — Technical design and data model
+
 ## License
 
 Apache-2.0

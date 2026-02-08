@@ -194,3 +194,4 @@ with axonize.llm_span("generate", model="gpt-4") as s:
 - See [SDK API Reference](sdk-reference.md) for the full API
 - Check [Examples](../examples/) for framework integrations
 - Read [Server Deployment](server-deployment.md) for production setup
+- Having issues? See [Troubleshooting](troubleshooting.md) for common problems and solutions
