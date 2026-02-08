@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 
 import axonize
 
@@ -22,6 +23,7 @@ axonize.init(
     endpoint="localhost:4317",
     service_name="ollama-app",
     environment="development",
+    api_key=os.getenv("AXONIZE_API_KEY"),  # Required for authentication
 )
 
 

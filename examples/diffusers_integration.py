@@ -9,6 +9,8 @@ Usage:
     python examples/diffusers_integration.py
 """
 
+import os
+
 import axonize
 
 # Initialize Axonize with GPU profiling
@@ -17,6 +19,7 @@ axonize.init(
     service_name="diffusion-service",
     environment="development",
     gpu_profiling=True,
+    api_key=os.getenv("AXONIZE_API_KEY"),  # Required for authentication
 )
 
 

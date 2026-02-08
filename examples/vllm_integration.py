@@ -10,6 +10,8 @@ Usage:
     python examples/vllm_integration.py
 """
 
+import os
+
 import axonize
 
 # Initialize Axonize with GPU profiling enabled
@@ -18,6 +20,7 @@ axonize.init(
     service_name="vllm-server",
     environment="production",
     gpu_profiling=True,
+    api_key=os.getenv("AXONIZE_API_KEY"),  # Required for authentication
 )
 
 

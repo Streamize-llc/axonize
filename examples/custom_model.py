@@ -10,6 +10,7 @@ Usage:
     python examples/custom_model.py
 """
 
+import os
 import time
 
 import axonize
@@ -19,6 +20,7 @@ axonize.init(
     service_name="custom-model-service",
     environment="development",
     gpu_profiling=True,
+    api_key=os.getenv("AXONIZE_API_KEY"),  # Required for authentication
 )
 
 

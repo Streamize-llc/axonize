@@ -1,5 +1,7 @@
 """Axonize Quick Start — minimal example to get tracing working."""
 
+import os
+
 import axonize
 
 # 1. Initialize the SDK
@@ -7,6 +9,7 @@ axonize.init(
     endpoint="localhost:4317",
     service_name="my-inference-service",
     environment="development",
+    api_key=os.getenv("AXONIZE_API_KEY"),  # Required for authentication
 )
 
 # 2. Trace an inference operation
