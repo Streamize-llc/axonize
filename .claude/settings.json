@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd $(git rev-parse --show-toplevel 2>/dev/null || pwd) && if [ -f sdk-py/pyproject.toml ]; then cd sdk-py && uv run mypy --no-error-summary --no-pretty 2>&1 | head -20 || true; fi",
+            "description": "Type-check Python SDK after edits"
+          }
+        ]
+      }
+    ],
+    "PreCommit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '=== Files staged for commit ===' && git diff --cached --name-only | head -20 && echo '===' && echo 'Verify only relevant files are staged'",
+            "description": "Show staged files before commit"
+          }
+        ]
+      }
+    ]
+  }
+}

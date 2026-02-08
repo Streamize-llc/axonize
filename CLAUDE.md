@@ -2,9 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project
+## General Behavior
+
+**Bias toward ACTION over PLANNING.** When given an implementation plan, start executing immediately rather than creating additional planning documents. If analysis is needed, keep it brief and transition to code changes within the first 2-3 messages. I value working code over comprehensive plans.
+
+**When the user asks to scope work to a specific directory or project, stay strictly within that scope.** Do not scan or modify sibling projects unless explicitly asked.
+
+## Project Context
 
 Axonize is an observability platform for AI inference workloads. It sits between infrastructure monitoring (Grafana/Prometheus) and LLM service tracing (Langfuse/LangSmith), focusing on inference-level GPU metrics and performance tracking.
+
+**Primary languages**: TypeScript (dashboard/functions), Python (SDK), Go (server). The goal is a unified platform with multi-vendor GPU support (NVIDIA + Apple Silicon).
 
 ## Commands
 
@@ -110,6 +118,18 @@ Raw SQL files in `migrations/{clickhouse,postgres}/`, applied alphabetically by 
 - `dashboard` — port 3000
 
 Environment variables for auth in docker-compose: `AXONIZE_API_KEY`, `AXONIZE_AUTH_MODE`, `AXONIZE_ADMIN_KEY`
+
+## Code Deletion & Cleanup
+
+**When asked to delete or remove code, ALWAYS confirm the specific list of items to delete/keep with the user BEFORE making changes.** Never assume something is unused without verification. Present a deletion list and explicitly ask if any items should be preserved.
+
+## Communication Style
+
+**When asking the user clarifying questions, ask them ONE AT A TIME, not in parallel batches.** Wait for each answer before asking the next question. This allows for detailed, focused responses rather than overwhelming with multiple questions at once.
+
+## Git & Commits
+
+**When committing changes, ONLY include files relevant to the current task.** Review staged files before committing and exclude unrelated changes. Use `git status` to verify what's being committed.
 
 ## Key Conventions
 
