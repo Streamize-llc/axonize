@@ -10,7 +10,7 @@ This guide walks you through setting up Axonize and sending your first traces.
 ## 1. Start the Server
 
 ```bash
-git clone https://github.com/your-org/axonize.git
+git clone https://github.com/Streamize-llc/axonize.git
 cd axonize
 
 # Start all services (ClickHouse, PostgreSQL, Server, Dashboard)
@@ -29,7 +29,24 @@ curl http://localhost:8080/healthz
 
 The dashboard is at `http://localhost:3000`.
 
-## 2. Install the SDK
+## 2. Set Up Authentication
+
+The server generates a default API key on first startup. Get it from the logs:
+
+```bash
+docker compose logs axonize-server | grep "API key"
+# Output: Generated API key: axon_...
+```
+
+Or set your own key in `.env`:
+
+```bash
+AXONIZE_API_KEY=your-secret-key
+```
+
+Save this key — you'll need it for SDK authentication.
+
+## 3. Install the SDK
 
 ```bash
 # Basic install (Apple Silicon GPU support included)
@@ -49,9 +66,10 @@ cd sdk-py
 pip install -e ".[dev]"
 ```
 
-## 3. Initialize and Trace
+## 4. Initialize and Trace
 
 ```python
+import os
 import axonize
 
 # Connect to the Axonize server
@@ -59,6 +77,7 @@ axonize.init(
     endpoint="localhost:4317",     # gRPC ingest endpoint
     service_name="my-service",     # Identifies your service
     environment="development",     # Environment tag
+    api_key=os.getenv("AXONIZE_API_KEY"),  # Required for authentication
 )
 
 # Create a traced operation
@@ -71,20 +90,24 @@ with axonize.span("my-operation") as s:
 axonize.shutdown()
 ```
 
-## 4. View Your Traces
+## 5. View Your Traces
 
 Open `http://localhost:3000/traces` to see your traced operations.
 
 Click a trace to see the span timeline (Gantt chart), hierarchical tree, and individual span details.
 
-## 5. Add GPU Profiling
+## 6. Add GPU Profiling
 
 Enable automatic GPU metric collection:
 
 ```python
+import os
+import axonize
+
 axonize.init(
     endpoint="localhost:4317",
     service_name="gpu-service",
+    api_key=os.getenv("AXONIZE_API_KEY"),
     gpu_profiling=True,  # Auto-detects NVIDIA or Apple Silicon
 )
 
@@ -113,11 +136,20 @@ Apple Silicon notes:
 - Some metrics (temperature, clock) report as 0 (unavailable via IOKit)
 - GPU utilization is derived from IOKit performance state residency
 
-## 6. Track LLM Metrics
+## 7. Track LLM Metrics
 
 Use `llm_span` for language model workloads:
 
 ```python
+import os
+import axonize
+
+axonize.init(
+    endpoint="localhost:4317",
+    service_name="llm-service",
+    api_key=os.getenv("AXONIZE_API_KEY"),
+)
+
 with axonize.llm_span("generate", model="llama-3-70b") as s:
     s.set_tokens_input(128)
 
@@ -131,7 +163,7 @@ with axonize.llm_span("generate", model="llama-3-70b") as s:
     #   - Total output tokens
 ```
 
-## 7. Track Costs
+## 8. Track Costs
 
 Attach cost data to spans using the `cost.*` attribute prefix. Costs are user-provided values — Axonize stores and displays them but does not calculate them automatically.
 
@@ -149,8 +181,9 @@ with axonize.llm_span("generate", model="gpt-4") as s:
 |-----------|---------|-------------|
 | `endpoint` | (required) | gRPC server address (host:port) |
 | `service_name` | (required) | Service identifier |
+| `api_key` | `None` | Authentication key (required if server has `AXONIZE_API_KEY` set) |
 | `environment` | `"development"` | Environment tag |
-| `gpu_profiling` | `False` | Enable pynvml GPU profiling |
+| `gpu_profiling` | `False` | Enable GPU profiling (auto-detects NVIDIA or Apple Silicon) |
 | `batch_size` | `512` | Spans per export batch |
 | `flush_interval_ms` | `5000` | Max ms between flushes |
 | `buffer_size` | `8192` | Ring buffer capacity |
