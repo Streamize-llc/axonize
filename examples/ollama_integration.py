@@ -2,12 +2,18 @@
 
 Shows how to trace Ollama API calls with streaming token tracking.
 
+Prerequisites:
+    Axonize server must be running:
+        docker compose up -d && make migrate
+
+    Ollama must be running:
+        ollama serve
+        ollama pull llama3
+
 Requirements:
     pip install axonize requests
 
 Usage:
-    # Start Ollama: ollama serve
-    # Pull a model: ollama pull llama3
     python examples/ollama_integration.py
 """
 

@@ -3,6 +3,10 @@
 Shows how to instrument a vLLM inference server with Axonize for
 streaming token tracking, TTFT/TPOT metrics, and GPU attribution.
 
+Prerequisites:
+    Server must be running:
+        docker compose up -d && make migrate
+
 Requirements:
     pip install axonize vllm
 

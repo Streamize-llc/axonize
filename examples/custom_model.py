@@ -3,6 +3,10 @@
 Shows how to instrument any inference pipeline (PyTorch, TensorFlow,
 ONNX Runtime, etc.) with Axonize tracing and GPU attribution.
 
+Prerequisites:
+    Server must be running:
+        docker compose up -d && make migrate
+
 Requirements:
     pip install axonize
 

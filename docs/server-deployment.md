@@ -165,8 +165,9 @@ services:
 ### Data Retention
 
 ClickHouse tables use TTL for automatic data cleanup:
-- `spans`: 90-day retention
-- `gpu_metrics`: 30-day retention
+- `spans`: 30-day retention
+- `traces`: 90-day retention (aggregated trace summaries)
+- `gpu_metrics`: 7-day retention
 
 ### Backup
 

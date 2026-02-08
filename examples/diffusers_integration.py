@@ -2,6 +2,10 @@
 
 Shows how to trace image generation pipelines with GPU attribution.
 
+Prerequisites:
+    Server must be running:
+        docker compose up -d && make migrate
+
 Requirements:
     pip install axonize diffusers torch
 

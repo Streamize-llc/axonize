@@ -1,4 +1,9 @@
-"""Axonize Quick Start — minimal example to get tracing working."""
+"""Axonize Quick Start — minimal example to get tracing working.
+
+Prerequisites:
+    Server must be running:
+        docker compose up -d && make migrate
+"""
 
 import os
 
