@@ -12,17 +12,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Axonize is an observability platform for AI inference workloads. It sits between infrastructure monitoring (Grafana/Prometheus) and LLM service tracing (Langfuse/LangSmith), focusing on inference-level GPU metrics and performance tracking.
 
-**Primary languages**: TypeScript (dashboard/functions), Python (SDK), Go (server). The goal is a unified platform with multi-vendor GPU support (NVIDIA + Apple Silicon).
+**Primary languages**: Python (SDK), Go (server). Dashboard lives in a separate repo (`axonize-web`). The goal is a unified platform with multi-vendor GPU support (NVIDIA + Apple Silicon).
 
 ## Commands
 
 ### Development
 ```bash
 make dev              # Start ClickHouse + PostgreSQL containers only
-make dev-all          # Start all services (DBs + server + dashboard)
+make dev-all          # Start all services (DBs + server)
 make migrate          # Apply DB migrations (requires clickhouse-client + psql)
 make clean            # Stop containers, remove volumes and build artifacts
-make dev-dashboard    # Start dashboard dev server (hot-reload)
 ```
 
 ### Testing
@@ -54,7 +53,7 @@ Must use native Python — the uv-installed `python3.13` is a wasm32/emscripten 
 ### Data flow
 ```
 SDK (Python) → gRPC (OTLP) → Server (Go) → ClickHouse (spans/metrics) + PostgreSQL (GPU registry)
-                                          → REST API → Dashboard (React)
+                                          → REST API → axonize-web (separate repo)
 ```
 
 ### SDK internal pipeline
@@ -115,7 +114,6 @@ Raw SQL files in `migrations/{clickhouse,postgres}/`, applied alphabetically by 
 - `clickhouse` — ports 8123 (HTTP), 9000 (native)
 - `postgres` — port 5432
 - `axonize-server` — gRPC :4317, HTTP :8080
-- `dashboard` — port 3000
 
 Environment variables for auth in docker-compose: `AXONIZE_API_KEY`, `AXONIZE_AUTH_MODE`, `AXONIZE_ADMIN_KEY`
 
