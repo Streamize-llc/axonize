@@ -30,6 +30,25 @@ func handleListTraces(querier TraceQuerier) http.HandlerFunc {
 		if v := q.Get("service_name"); v != "" {
 			filter.ServiceName = &v
 		}
+		if v := q.Get("status"); v != "" {
+			filter.Status = &v
+		}
+		if v := q.Get("environment"); v != "" {
+			filter.Environment = &v
+		}
+		if v := q.Get("model_name"); v != "" {
+			filter.ModelName = &v
+		}
+		if v := q.Get("min_duration_ms"); v != "" {
+			if d, err := strconv.ParseFloat(v, 64); err == nil {
+				filter.MinDurationMs = &d
+			}
+		}
+		if v := q.Get("max_duration_ms"); v != "" {
+			if d, err := strconv.ParseFloat(v, 64); err == nil {
+				filter.MaxDurationMs = &d
+			}
+		}
 		if v := q.Get("start"); v != "" {
 			if t, err := time.Parse(time.RFC3339, v); err == nil {
 				filter.StartTime = &t

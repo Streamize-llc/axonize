@@ -108,7 +108,7 @@ func (s *PostgresStore) UpsertResourceContext(ctx context.Context, rc ResourceCo
 // ListGPUs returns a summary of all registered GPUs for a tenant.
 func (s *PostgresStore) ListGPUs(ctx context.Context, tenantID string) ([]GPUSummary, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT cr.resource_uuid, cr.physical_gpu_uuid, pg.model, cr.resource_type, pg.node_id
+		SELECT cr.resource_uuid, cr.physical_gpu_uuid, pg.model, pg.vendor, cr.resource_type, pg.node_id
 		FROM compute_resources cr
 		JOIN physical_gpus pg ON pg.tenant_id = cr.tenant_id AND pg.uuid = cr.physical_gpu_uuid
 		WHERE cr.tenant_id = $1
@@ -122,7 +122,7 @@ func (s *PostgresStore) ListGPUs(ctx context.Context, tenantID string) ([]GPUSum
 	var gpus []GPUSummary
 	for rows.Next() {
 		var g GPUSummary
-		if err := rows.Scan(&g.ResourceUUID, &g.PhysicalUUID, &g.Model, &g.ResourceType, &g.NodeID); err != nil {
+		if err := rows.Scan(&g.ResourceUUID, &g.PhysicalUUID, &g.Model, &g.Vendor, &g.ResourceType, &g.NodeID); err != nil {
 			return nil, fmt.Errorf("scan gpu: %w", err)
 		}
 		gpus = append(gpus, g)
@@ -318,7 +318,8 @@ func (s *PostgresStore) InsertGPUMetrics(ctx context.Context, spans []SpanRecord
 // QueryGPUMetrics returns GPU metric time series for a given resource UUID.
 func (s *PostgresStore) QueryGPUMetrics(ctx context.Context, tenantID, uuid string, start, end time.Time) ([]GPUMetricRow, error) {
 	query := `
-		SELECT timestamp, resource_uuid, utilization, memory_used_gb, power_watts
+		SELECT timestamp, resource_uuid, utilization, memory_used_gb, memory_total_gb,
+		       power_watts, temperature_celsius, clock_mhz, active_spans
 		FROM gpu_metrics
 		WHERE tenant_id = $1
 		  AND resource_uuid = $2
@@ -336,7 +337,8 @@ func (s *PostgresStore) QueryGPUMetrics(ctx context.Context, tenantID, uuid stri
 	var metrics []GPUMetricRow
 	for rows.Next() {
 		var m GPUMetricRow
-		if err := rows.Scan(&m.Timestamp, &m.ResourceUUID, &m.Utilization, &m.MemoryUsedGB, &m.PowerWatts); err != nil {
+		if err := rows.Scan(&m.Timestamp, &m.ResourceUUID, &m.Utilization, &m.MemoryUsedGB, &m.MemoryTotalGB,
+			&m.PowerWatts, &m.TemperatureCelsius, &m.ClockMHz, &m.ActiveSpans); err != nil {
 			return nil, fmt.Errorf("scan gpu metric: %w", err)
 		}
 		metrics = append(metrics, m)
@@ -358,7 +360,8 @@ func (s *PostgresStore) QueryAnalyticsOverview(ctx context.Context, tenantID str
 				ELSE 0
 			END AS error_rate,
 			(SELECT COUNT(DISTINCT u) FROM spans s2, unnest(s2.gpu_resource_uuids) AS u
-			 WHERE s2.tenant_id = $1 AND s2.start_time >= $2 AND s2.start_time <= $3) AS active_gpu_count
+			 WHERE s2.tenant_id = $1 AND s2.start_time >= $2 AND s2.start_time <= $3) AS active_gpu_count,
+			COALESCE(SUM(cost_usd), 0) AS total_cost_usd
 		FROM spans
 		WHERE tenant_id = $1 AND start_time >= $2 AND start_time <= $3
 	`, tenantID, start, end).Scan(
@@ -366,6 +369,7 @@ func (s *PostgresStore) QueryAnalyticsOverview(ctx context.Context, tenantID str
 		&overview.AvgLatencyMs,
 		&overview.ErrorRate,
 		&overview.ActiveGPUCount,
+		&overview.TotalCostUSD,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("analytics summary: %w", err)
@@ -442,6 +446,31 @@ func (s *PostgresStore) QueryTraces(ctx context.Context, f TraceFilter) ([]Trace
 		args = append(args, *f.ServiceName)
 		paramIdx++
 	}
+	if f.Status != nil {
+		where += fmt.Sprintf(" AND status = $%d", paramIdx)
+		args = append(args, *f.Status)
+		paramIdx++
+	}
+	if f.Environment != nil {
+		where += fmt.Sprintf(" AND environment = $%d", paramIdx)
+		args = append(args, *f.Environment)
+		paramIdx++
+	}
+	if f.ModelName != nil {
+		where += fmt.Sprintf(" AND model_name = $%d", paramIdx)
+		args = append(args, *f.ModelName)
+		paramIdx++
+	}
+	if f.MinDurationMs != nil {
+		where += fmt.Sprintf(" AND duration_ms >= $%d", paramIdx)
+		args = append(args, *f.MinDurationMs)
+		paramIdx++
+	}
+	if f.MaxDurationMs != nil {
+		where += fmt.Sprintf(" AND duration_ms <= $%d", paramIdx)
+		args = append(args, *f.MaxDurationMs)
+		paramIdx++
+	}
 	if f.StartTime != nil {
 		where += fmt.Sprintf(" AND start_time >= $%d", paramIdx)
 		args = append(args, *f.StartTime)
@@ -506,7 +535,10 @@ func (s *PostgresStore) QueryTraceByID(ctx context.Context, tenantID string, tra
 	query := `
 		SELECT span_id, parent_span_id, name, service_name, environment,
 		       start_time, end_time, duration_ms,
-		       status, error_message, attributes
+		       status, error_message,
+		       model_name, inference_type, tokens_input, tokens_output,
+		       tokens_per_second, ttft_ms, cost_usd,
+		       attributes
 		FROM spans
 		WHERE tenant_id = $1 AND trace_id = $2
 		ORDER BY start_time ASC
@@ -530,7 +562,10 @@ func (s *PostgresStore) QueryTraceByID(ctx context.Context, tenantID string, tra
 			&sd.SpanID, &sd.ParentSpanID, &sd.Name,
 			&svcName, &env,
 			&sd.StartTime, &sd.EndTime, &sd.DurationMs,
-			&sd.Status, &sd.ErrorMessage, &attrsJSON,
+			&sd.Status, &sd.ErrorMessage,
+			&sd.ModelName, &sd.InferenceType, &sd.TokensInput, &sd.TokensOutput,
+			&sd.TokensPerSecond, &sd.TtftMs, &sd.CostUSD,
+			&attrsJSON,
 		); err != nil {
 			return nil, fmt.Errorf("scan span: %w", err)
 		}
@@ -591,6 +626,211 @@ func (s *PostgresStore) QueryTraceByID(ctx context.Context, tenantID string, tra
 	}
 
 	return detail, nil
+}
+
+// ---------------------------------------------------------------------------
+// Model analytics
+// ---------------------------------------------------------------------------
+
+// QueryModelStats returns per-model analytics for the given time range.
+func (s *PostgresStore) QueryModelStats(ctx context.Context, tenantID string, start, end time.Time) ([]ModelStats, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT
+			COALESCE(model_name, 'unknown') AS model,
+			COUNT(*) AS total,
+			COALESCE(AVG(duration_ms), 0) AS avg_latency,
+			COALESCE(AVG(ttft_ms), 0) AS avg_ttft,
+			COALESCE(AVG(tokens_per_second), 0) AS avg_tps,
+			COALESCE(SUM(tokens_input::bigint), 0) AS tokens_in,
+			COALESCE(SUM(tokens_output::bigint), 0) AS tokens_out,
+			COALESCE(SUM(cost_usd), 0) AS cost,
+			CASE WHEN COUNT(*) > 0
+				THEN COUNT(*) FILTER (WHERE status = 'error')::float / COUNT(*)
+				ELSE 0
+			END AS error_rate
+		FROM spans
+		WHERE tenant_id = $1 AND start_time >= $2 AND start_time <= $3
+		  AND model_name IS NOT NULL
+		GROUP BY model_name
+		ORDER BY total DESC
+	`, tenantID, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("query model stats: %w", err)
+	}
+	defer rows.Close()
+
+	var models []ModelStats
+	for rows.Next() {
+		var m ModelStats
+		if err := rows.Scan(&m.ModelName, &m.TotalInferences, &m.AvgLatencyMs,
+			&m.AvgTtftMs, &m.AvgTokensPerSec, &m.TotalTokensIn, &m.TotalTokensOut,
+			&m.TotalCostUSD, &m.ErrorRate); err != nil {
+			return nil, fmt.Errorf("scan model stat: %w", err)
+		}
+		models = append(models, m)
+	}
+	if models == nil {
+		models = []ModelStats{}
+	}
+	return models, nil
+}
+
+// QueryServiceStats returns per-service analytics for the given time range.
+func (s *PostgresStore) QueryServiceStats(ctx context.Context, tenantID string, start, end time.Time) ([]ServiceStats, error) {
+	hours := end.Sub(start).Hours()
+	if hours < 1 {
+		hours = 1
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT
+			service_name,
+			COUNT(DISTINCT trace_id) AS total_traces,
+			COALESCE(AVG(duration_ms), 0) AS avg_latency,
+			CASE WHEN COUNT(*) > 0
+				THEN COUNT(*) FILTER (WHERE status = 'error')::float / COUNT(*)
+				ELSE 0
+			END AS error_rate
+		FROM spans
+		WHERE tenant_id = $1 AND start_time >= $2 AND start_time <= $3
+		GROUP BY service_name
+		ORDER BY total_traces DESC
+	`, tenantID, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("query service stats: %w", err)
+	}
+	defer rows.Close()
+
+	var services []ServiceStats
+	for rows.Next() {
+		var s ServiceStats
+		if err := rows.Scan(&s.ServiceName, &s.TotalTraces, &s.AvgLatencyMs, &s.ErrorRate); err != nil {
+			return nil, fmt.Errorf("scan service stat: %w", err)
+		}
+		s.ThroughputPerHr = float64(s.TotalTraces) / hours
+		services = append(services, s)
+	}
+	if services == nil {
+		services = []ServiceStats{}
+	}
+	return services, nil
+}
+
+// QueryErrorGroups returns grouped error summaries for the given time range.
+func (s *PostgresStore) QueryErrorGroups(ctx context.Context, tenantID string, start, end time.Time) ([]ErrorGroup, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT
+			COALESCE(error_message, 'Unknown error') AS msg,
+			COUNT(*) AS cnt,
+			(array_agg(service_name))[1] AS svc,
+			COALESCE((array_agg(model_name) FILTER (WHERE model_name IS NOT NULL))[1], '') AS model,
+			MAX(start_time) AS last_seen
+		FROM spans
+		WHERE tenant_id = $1 AND start_time >= $2 AND start_time <= $3
+		  AND status = 'error'
+		GROUP BY error_message
+		ORDER BY cnt DESC
+		LIMIT 50
+	`, tenantID, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("query error groups: %w", err)
+	}
+	defer rows.Close()
+
+	var groups []ErrorGroup
+	for rows.Next() {
+		var g ErrorGroup
+		if err := rows.Scan(&g.ErrorMessage, &g.Count, &g.ServiceName, &g.ModelName, &g.LastSeen); err != nil {
+			return nil, fmt.Errorf("scan error group: %w", err)
+		}
+		groups = append(groups, g)
+	}
+	if groups == nil {
+		groups = []ErrorGroup{}
+	}
+	return groups, nil
+}
+
+// QueryFilterOptions returns distinct values for filter dropdowns.
+func (s *PostgresStore) QueryFilterOptions(ctx context.Context, tenantID string) (*FilterOptions, error) {
+	opts := &FilterOptions{}
+
+	// Service names
+	rows, _ := s.pool.Query(ctx, `SELECT DISTINCT service_name FROM spans WHERE tenant_id = $1 AND service_name != '' ORDER BY service_name`, tenantID)
+	for rows.Next() {
+		var v string
+		rows.Scan(&v)
+		opts.ServiceNames = append(opts.ServiceNames, v)
+	}
+	rows.Close()
+
+	// Environments
+	rows, _ = s.pool.Query(ctx, `SELECT DISTINCT environment FROM spans WHERE tenant_id = $1 AND environment != '' ORDER BY environment`, tenantID)
+	for rows.Next() {
+		var v string
+		rows.Scan(&v)
+		opts.Environments = append(opts.Environments, v)
+	}
+	rows.Close()
+
+	// Model names
+	rows, _ = s.pool.Query(ctx, `SELECT DISTINCT model_name FROM spans WHERE tenant_id = $1 AND model_name IS NOT NULL ORDER BY model_name`, tenantID)
+	for rows.Next() {
+		var v string
+		rows.Scan(&v)
+		opts.ModelNames = append(opts.ModelNames, v)
+	}
+	rows.Close()
+
+	// Inference types
+	rows, _ = s.pool.Query(ctx, `SELECT DISTINCT inference_type FROM spans WHERE tenant_id = $1 AND inference_type IS NOT NULL ORDER BY inference_type`, tenantID)
+	for rows.Next() {
+		var v string
+		rows.Scan(&v)
+		opts.InferenceTypes = append(opts.InferenceTypes, v)
+	}
+	rows.Close()
+
+	// Ensure non-nil slices
+	if opts.ServiceNames == nil { opts.ServiceNames = []string{} }
+	if opts.Environments == nil { opts.Environments = []string{} }
+	if opts.ModelNames == nil { opts.ModelNames = []string{} }
+	if opts.InferenceTypes == nil { opts.InferenceTypes = []string{} }
+
+	return opts, nil
+}
+
+// QueryGPUFleet returns fleet-level GPU overview for a tenant.
+func (s *PostgresStore) QueryGPUFleet(ctx context.Context, tenantID string) (*GPUFleetOverview, error) {
+	fleet := &GPUFleetOverview{
+		ByVendor: make(map[string]int),
+		ByModel:  make(map[string]int),
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT pg.vendor, pg.model, COUNT(DISTINCT cr.resource_uuid)
+		FROM compute_resources cr
+		JOIN physical_gpus pg ON pg.tenant_id = cr.tenant_id AND pg.uuid = cr.physical_gpu_uuid
+		WHERE cr.tenant_id = $1
+		GROUP BY pg.vendor, pg.model
+	`, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("query gpu fleet: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var vendor, model string
+		var count int
+		if err := rows.Scan(&vendor, &model, &count); err != nil {
+			return nil, fmt.Errorf("scan gpu fleet: %w", err)
+		}
+		fleet.TotalGPUs += count
+		fleet.ByVendor[vendor] += count
+		fleet.ByModel[model] += count
+	}
+
+	return fleet, nil
 }
 
 // ---------------------------------------------------------------------------

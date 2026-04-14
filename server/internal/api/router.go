@@ -41,6 +41,15 @@ func NewRouter(s Store, apiKey, authMode, jwtSecret string, resolver *tenant.Res
 
 	// Analytics
 	mux.HandleFunc("GET /api/v1/analytics/overview", handleAnalyticsOverview(s))
+	mux.HandleFunc("GET /api/v1/analytics/models", handleAnalyticsModels(s))
+	mux.HandleFunc("GET /api/v1/analytics/services", handleAnalyticsServices(s))
+	mux.HandleFunc("GET /api/v1/analytics/errors", handleAnalyticsErrors(s))
+
+	// Meta
+	mux.HandleFunc("GET /api/v1/meta/filters", handleMetaFilters(s))
+
+	// GPU Fleet
+	mux.HandleFunc("GET /api/v1/gpus/fleet", handleGPUFleet(s))
 
 	// Admin routes (multi-tenant only)
 	if authMode == "multi_tenant" && adminKey != "" {
