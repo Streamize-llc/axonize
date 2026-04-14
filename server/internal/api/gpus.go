@@ -48,6 +48,10 @@ func handleGetGPU(querier GPUQuerier) http.HandlerFunc {
 		tenantID := tenant.FromContext(r.Context())
 		detail, err := querier.GetGPU(r.Context(), tenantID, uuid)
 		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if detail == nil {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "gpu not found"})
 			return
 		}

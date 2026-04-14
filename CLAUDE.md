@@ -74,10 +74,11 @@ GPU metrics are collected in a separate daemon thread by `GPUProfiler` and attac
 - `gpu.N.vendor` OTLP attribute carries vendor info SDK→Server
 
 ### Server structure
-- `internal/server.go` — Orchestrates gRPC + HTTP listeners, wires auth interceptors based on `auth_mode`
+- `internal/server.go` — Orchestrates gRPC + HTTP listeners, wires auth interceptors based on `auth_mode`, starts retention cleanup
+- `internal/auth/auth.go` — JWT generation/validation (HS256) + bcrypt password hashing
 - `internal/ingest/handler.go` — OTLP gRPC handler: parses protobuf spans, extracts GPU attributes (`gpu.N.*`), batches to PostgreSQL, upserts GPU registry; records usage metrics when multi-tenant
-- `internal/store/` — PostgreSQL store for all data (spans, gpu_metrics, GPU registry, tenants); all queries filter by `tenant_id`
-- `internal/api/` — REST endpoints for traces, GPUs, analytics, admin (tenant/key management)
+- `internal/store/` — PostgreSQL store for all data (spans, gpu_metrics, GPU registry, tenants); all queries filter by `tenant_id`; retention cleanup goroutine
+- `internal/api/` — REST endpoints for traces, GPUs, analytics, auth (signup/login), admin (tenant/key management)
 - `internal/config/` — YAML config with env var overrides (`AXONIZE_CONFIG` or default `config.yaml`)
 - `internal/tenant/` — Multi-tenant support: context propagation (`tenant.go`), API key → tenant_id resolution with 5-min cache (`resolver.go`), usage metering for hybrid billing (`usage.go`)
 
@@ -94,9 +95,14 @@ Every request carries a `tenant_id` through Go's `context.Context`:
 
 When `auth_mode = "static"` (default), tenant_id is always `"default"` — zero behavior change from single-tenant.
 
-### Authentication modes
-- **static** (default): Single API key via `AXONIZE_API_KEY`, all data under `tenant_id = "default"`
-- **multi_tenant**: API key → tenant_id resolution via `api_keys` table (SHA-256 hash lookup, 5-min cache). Admin API protected by `AXONIZE_ADMIN_KEY`
+### Authentication
+The server supports three auth mechanisms, all via `Authorization: Bearer <token>`:
+
+- **Static API key** (`auth_mode = "static"`, default): Single key via `AXONIZE_API_KEY`, all data under `tenant_id = "default"`. Best for self-hosted single-user.
+- **Multi-tenant API key** (`auth_mode = "multi_tenant"`): API key → tenant_id resolution via `api_keys` table (SHA-256 hash lookup, 5-min cache). Admin API protected by `AXONIZE_ADMIN_KEY`.
+- **JWT user auth**: When `AXONIZE_JWT_SECRET` is set, enables `/api/v1/auth/*` endpoints (signup, login, me, logout). Signup auto-creates tenant + API key. The `jwtOrAPIKeyMiddleware` distinguishes JWT (3 dot-separated parts) from API keys (`ax_live_` prefix) automatically — both SDK and dashboard use the same Bearer token pattern.
+
+Auth endpoints (`internal/api/auth.go`): `POST /auth/signup`, `POST /auth/login`, `GET /auth/me`, `POST /auth/logout`. Password hashing via bcrypt, JWT via HS256 with 24h expiry (`internal/auth/auth.go`).
 
 ### Database (PostgreSQL only)
 Single PostgreSQL database holds all data:
@@ -105,7 +111,7 @@ Single PostgreSQL database holds all data:
   1. `physical_gpus` — Immutable hardware (UUID, model, vendor, node)
   2. `compute_resources` — Logical unit (full GPU or MIG instance)
   3. `resource_contexts` — Runtime labels ("cuda:0", pod/container info)
-- **Multi-tenant**: `tenants`, `api_keys`, `usage_records`
+- **Auth & Multi-tenant**: `users` (email/password), `tenants`, `api_keys`, `usage_records`
 
 This disambiguates MIG environments where every pod sees "cuda:0".
 
@@ -116,7 +122,13 @@ Raw SQL files in `migrations/postgres/`, applied alphabetically by `migrate.sh`.
 - `postgres` — port 5432
 - `axonize-server` — gRPC :4317, HTTP :8080
 
-Environment variables for auth in docker-compose: `AXONIZE_API_KEY`, `AXONIZE_AUTH_MODE`, `AXONIZE_ADMIN_KEY`
+Environment variables for auth in docker-compose: `AXONIZE_API_KEY`, `AXONIZE_AUTH_MODE`, `AXONIZE_ADMIN_KEY`, `AXONIZE_JWT_SECRET`
+
+### Deployment
+- **Server**: Fly.io (`fly.toml` at repo root, builds `server/Dockerfile`)
+- **Dashboard**: Vercel (separate repo `axonize-web`)
+- **Database**: Supabase PostgreSQL (Transaction Pooler on port 6543) or self-hosted Docker PostgreSQL
+- PgBouncer compatibility: `pgx` configured with `QueryExecModeSimpleProtocol` (no prepared statements)
 
 ## Code Deletion & Cleanup
 
