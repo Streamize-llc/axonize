@@ -70,7 +70,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger) (*Server, error) {
 	handler := ingest.NewHandler(pgStore, pgStore, logger, meter)
 	s.ingest = handler
 
-	router := api.NewRouter(pgStore, cfg.Server.APIKey, cfg.Server.AuthMode, s.resolver, cfg.Server.AdminKey)
+	router := api.NewRouter(pgStore, cfg.Server.APIKey, cfg.Server.AuthMode, cfg.Server.JWTSecret, s.resolver, cfg.Server.AdminKey)
 	grpcSrv := grpc.NewServer(grpcOpts...)
 	collectorpb.RegisterTraceServiceServer(grpcSrv, handler)
 

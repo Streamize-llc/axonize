@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/axonize/server/internal/auth"
 	"github.com/axonize/server/internal/tenant"
 )
 
@@ -17,12 +18,17 @@ type Store interface {
 }
 
 // NewRouter creates the HTTP router with all API endpoints.
-func NewRouter(s Store, apiKey, authMode string, resolver *tenant.Resolver, adminKey string) http.Handler {
+func NewRouter(s Store, apiKey, authMode, jwtSecret string, resolver *tenant.Resolver, adminKey string) http.Handler {
 	mux := http.NewServeMux()
 
 	// Health
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	mux.HandleFunc("GET /readyz", handleReadyz(s))
+
+	// Auth routes (public, no auth required)
+	if jwtSecret != "" && resolver != nil {
+		registerAuthRoutes(mux, resolver.Pool(), jwtSecret)
+	}
 
 	// Traces
 	mux.HandleFunc("GET /api/v1/traces", handleListTraces(s))
@@ -45,11 +51,58 @@ func NewRouter(s Store, apiKey, authMode string, resolver *tenant.Resolver, admi
 
 	var handler http.Handler = mux
 	if authMode == "multi_tenant" && resolver != nil {
-		handler = multiTenantMiddleware(handler, resolver)
+		handler = jwtOrAPIKeyMiddleware(handler, resolver, jwtSecret)
 	} else if apiKey != "" {
 		handler = apiKeyMiddleware(handler, apiKey)
 	}
 	return corsMiddleware(handler)
+}
+
+// jwtOrAPIKeyMiddleware validates either a JWT token or an API key.
+// JWT tokens contain dots (3 parts), API keys start with "ax_live_".
+func jwtOrAPIKeyMiddleware(next http.Handler, resolver *tenant.Resolver, jwtSecret string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Exempt paths
+		if r.URL.Path == "/" || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/v1/auth/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/v1/admin/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		authHeader := r.Header.Get("Authorization")
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		token := authHeader[7:]
+
+		// JWT tokens have 3 dot-separated parts
+		if jwtSecret != "" && strings.Count(token, ".") == 2 {
+			claims, err := auth.ValidateJWT(token, jwtSecret)
+			if err == nil {
+				ctx := tenant.WithTenantID(r.Context(), claims.TenantID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+		}
+
+		// Fall back to API key resolution
+		tenantID, err := resolver.Resolve(r.Context(), token)
+		if err != nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		ctx := tenant.WithTenantID(r.Context(), tenantID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 // apiKeyMiddleware validates the Authorization: Bearer <key> header.

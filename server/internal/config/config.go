@@ -16,8 +16,9 @@ type ServerConfig struct {
 	GRPCPort int    `yaml:"grpc_port"`
 	HTTPPort int    `yaml:"http_port"`
 	APIKey   string `yaml:"api_key"`
-	AuthMode string `yaml:"auth_mode"` // "static" (default) | "multi_tenant"
-	AdminKey string `yaml:"admin_key"` // static admin key for admin API
+	AuthMode  string `yaml:"auth_mode"`  // "static" (default) | "multi_tenant"
+	AdminKey  string `yaml:"admin_key"`  // static admin key for admin API
+	JWTSecret string `yaml:"jwt_secret"` // JWT signing secret for user auth
 }
 
 type PostgreSQLConfig struct {
@@ -102,5 +103,8 @@ func (c *Config) ApplyEnv() {
 	}
 	if v := os.Getenv("AXONIZE_ADMIN_KEY"); v != "" {
 		c.Server.AdminKey = v
+	}
+	if v := os.Getenv("AXONIZE_JWT_SECRET"); v != "" {
+		c.Server.JWTSecret = v
 	}
 }
