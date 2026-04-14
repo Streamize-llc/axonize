@@ -125,10 +125,11 @@ Raw SQL files in `migrations/postgres/`, applied alphabetically by `migrate.sh`.
 Environment variables for auth in docker-compose: `AXONIZE_API_KEY`, `AXONIZE_AUTH_MODE`, `AXONIZE_ADMIN_KEY`, `AXONIZE_JWT_SECRET`
 
 ### Deployment
-- **Server**: Fly.io (`fly.toml` at repo root, builds `server/Dockerfile`)
-- **Dashboard**: Vercel (separate repo `axonize-web`)
-- **Database**: Supabase PostgreSQL (Transaction Pooler on port 6543) or self-hosted Docker PostgreSQL
-- PgBouncer compatibility: `pgx` configured with `QueryExecModeSimpleProtocol` (no prepared statements)
+- **Server**: Fly.io (`fly.toml` at repo root, builds `server/Dockerfile`, `axonize` app in `streamize` org, `iad` region)
+- **Dashboard**: Vercel (separate repo `axonize-web`, `streamize` team)
+- **Database**: Fly Postgres (`axonize-db` app, internal network `axonize-db.internal:5432`). For local access: `fly proxy 15432:5432 --app axonize-db`
+- Self-hosted: Docker PostgreSQL via `docker compose up -d` (same schema, same server binary)
+- PgBouncer compatibility: `pgx` configured with `QueryExecModeSimpleProtocol` (for external poolers)
 
 ## Code Deletion & Cleanup
 
