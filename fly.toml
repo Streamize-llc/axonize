@@ -1,0 +1,35 @@
+app = "axonize"
+primary_region = "iad"
+
+[build]
+  dockerfile = "server/Dockerfile"
+
+[env]
+  AXONIZE_GRPC_PORT = "4317"
+  AXONIZE_HTTP_PORT = "8080"
+  AXONIZE_AUTH_MODE = "static"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = 256
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "10s"
+    timeout = "2s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/healthz"
+
+[[services]]
+  internal_port = 4317
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 4317
