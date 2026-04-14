@@ -10,10 +10,8 @@ make migrate
 ```
 
 This starts:
-- **ClickHouse** (port 9000/8123) — time-series storage for spans and GPU metrics
-- **PostgreSQL** (port 5432) — GPU registry
+- **PostgreSQL** (port 5432) — all data (spans, GPU metrics, GPU registry, tenants)
 - **Axonize Server** (port 4317 gRPC, 8080 HTTP) — ingest and query
-- **Dashboard** (port 3000) — web UI
 
 ## Configuration
 
@@ -23,9 +21,6 @@ The server loads configuration from environment variables. See `.env.example` fo
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CLICKHOUSE_HOST` | `localhost` | ClickHouse hostname |
-| `CLICKHOUSE_PORT` | `9000` | ClickHouse native port |
-| `CLICKHOUSE_DATABASE` | `axonize` | Database name |
 | `POSTGRES_HOST` | `localhost` | PostgreSQL hostname |
 | `POSTGRES_PORT` | `5432` | PostgreSQL port |
 | `POSTGRES_DATABASE` | `axonize` | Database name |
@@ -62,8 +57,7 @@ make migrate
 ```
 
 This runs `migrations/migrate.sh` which applies:
-- `migrations/clickhouse/` — ClickHouse tables (spans, traces, gpu_metrics) with `tenant_id` columns
-- `migrations/postgres/` — PostgreSQL tables (physical_gpus, compute_resources, resource_contexts, tenants, api_keys, usage_records)
+- `migrations/postgres/` — All tables (spans, gpu_metrics, physical_gpus, compute_resources, resource_contexts, tenants, api_keys, usage_records)
 
 ## REST API Endpoints
 
@@ -145,11 +139,6 @@ Set resource limits in Docker Compose for production:
 
 ```yaml
 services:
-  clickhouse:
-    deploy:
-      resources:
-        limits:
-          memory: 4G
   postgres:
     deploy:
       resources:
@@ -164,12 +153,10 @@ services:
 
 ### Data Retention
 
-ClickHouse tables use TTL for automatic data cleanup:
+The server runs a background cleanup goroutine every hour:
 - `spans`: 30-day retention
-- `traces`: 90-day retention (aggregated trace summaries)
 - `gpu_metrics`: 7-day retention
 
 ### Backup
 
-- **ClickHouse**: Use `clickhouse-backup` or snapshot the data volume
-- **PostgreSQL**: Standard `pg_dump` for the GPU registry
+- **PostgreSQL**: Standard `pg_dump` for all data

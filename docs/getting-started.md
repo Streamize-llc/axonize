@@ -13,7 +13,7 @@ This guide walks you through setting up Axonize and sending your first traces.
 git clone https://github.com/Streamize-llc/axonize.git
 cd axonize
 
-# Start all services (ClickHouse, PostgreSQL, Server, Dashboard)
+# Start all services (PostgreSQL, Server)
 docker compose up -d
 
 # Apply database migrations
@@ -27,7 +27,7 @@ curl http://localhost:8080/healthz
 # {"status":"ok"}
 ```
 
-The dashboard is at `http://localhost:3000`.
+For the dashboard, see the separate [axonize-web](https://github.com/Streamize-llc/axonize-web) repository.
 
 ## 2. Set Up Authentication
 
@@ -92,9 +92,14 @@ axonize.shutdown()
 
 ## 5. View Your Traces
 
-Open `http://localhost:3000/traces` to see your traced operations.
+Query traces via the REST API or use the [axonize-web](https://github.com/Streamize-llc/axonize-web) dashboard:
 
-Click a trace to see the span timeline (Gantt chart), hierarchical tree, and individual span details.
+```bash
+curl -H "Authorization: Bearer $AXONIZE_API_KEY" \
+  http://localhost:8080/api/v1/traces
+```
+
+The dashboard shows span timelines (Gantt chart), hierarchical trees, and individual span details.
 
 ## 6. Add GPU Profiling
 

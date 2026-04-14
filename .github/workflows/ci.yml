@@ -37,18 +37,6 @@ jobs:
       run:
         working-directory: server
 
-    services:
-      clickhouse:
-        image: clickhouse/clickhouse-server:24-alpine
-        ports:
-          - 9000:9000
-          - 8123:8123
-        options: >-
-          --health-cmd "clickhouse-client --query 'SELECT 1'"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-
     steps:
       - uses: actions/checkout@v4
 
@@ -59,12 +47,6 @@ jobs:
       - name: Resolve dependencies
         run: go mod tidy
 
-      - name: Apply ClickHouse migrations
-        run: |
-          for f in ../migrations/clickhouse/*.sql; do
-            clickhouse-client --host 127.0.0.1 --port 9000 --database default --multiquery < "$f"
-          done
-
       - name: Vet
         run: go vet ./...
 
@@ -73,7 +55,3 @@ jobs:
 
       - name: Test
         run: go test ./...
-        env:
-          CLICKHOUSE_HOST: 127.0.0.1
-          CLICKHOUSE_PORT: 9000
-          CLICKHOUSE_DATABASE: default

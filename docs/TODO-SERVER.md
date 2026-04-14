@@ -1,6 +1,7 @@
 # TODO: Backend Server
 
 > MVP 목표: OTLP 수신, 저장, 조회 API 제공
+> **Note**: ClickHouse는 제거되었으며, 모든 데이터는 PostgreSQL 단일 DB에 저장됩니다 (2026-04).
 
 ---
 
@@ -8,7 +9,7 @@
 
 - [x] 언어/프레임워크 결정 (Go 또는 Rust)
 - [x] 프로젝트 구조 생성
-- [x] 의존성 설정 (gRPC, ClickHouse client, PostgreSQL client)
+- [x] 의존성 설정 (gRPC, PostgreSQL client)
 - [x] 설정 파일 구조 (YAML 또는 환경변수)
 
 ---
@@ -25,7 +26,7 @@
 - [x] OTLP → 내부 Span 모델 변환
 - [x] Axonize 확장 속성 파싱 (ai.*, gpu.*)
 - [x] 배치 버퍼링
-- [x] ClickHouse 벌크 insert
+- [x] PostgreSQL 배치 insert
 
 ### 2.3 GPU Registry 연동
 - [x] 새 GPU 발견 시 PostgreSQL에 등록
@@ -82,18 +83,15 @@
 
 ## 5. 데이터베이스 연동
 
-### 5.1 ClickHouse
+### 5.1 PostgreSQL (단일 DB)
 - [x] 커넥션 풀
 - [x] spans 테이블 CRUD
-- [x] traces 테이블 CRUD
 - [x] gpu_metrics 테이블 CRUD
-- [x] 쿼리 최적화 (인덱스 활용)
-
-### 5.2 PostgreSQL
-- [x] 커넥션 풀
 - [x] physical_gpus 테이블 CRUD
 - [x] compute_resources 테이블 CRUD
 - [x] resource_contexts 테이블 CRUD
+- [x] 쿼리 최적화 (인덱스 활용)
+- [x] 데이터 보존 cleanup goroutine (spans: 30일, gpu_metrics: 7일)
 
 ---
 
@@ -108,7 +106,7 @@
 
 ## 7. 테스트
 
-- [x] 단위 테스트
+- [x] 단위 테스트 (tenant, ingest, api handler)
 - [ ] 통합 테스트 (DB 연동)
 - [ ] 부하 테스트 (10K spans/sec 목표)
 
@@ -132,7 +130,7 @@
 |------|------|------|
 | 1 | 프로젝트 셋업 | 기반 |
 | 2 | Ingest Service | SDK 연동 필수 |
-| 3 | ClickHouse 연동 | 데이터 저장 |
+| 3 | PostgreSQL 연동 | 데이터 저장 |
 | 4 | 기본 Query API | 대시보드 연동 |
 | 5 | PostgreSQL (GPU Registry) | GPU 관리 |
 | 6 | Analytics API | 대시보드 고도화 |

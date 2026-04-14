@@ -30,22 +30,18 @@ type Server struct {
 	cfg    *config.Config
 	logger *slog.Logger
 
-	chStore  *store.ClickHouseStore
 	pgStore  *store.PostgresStore
 	ingest   *ingest.Handler
 	grpcSrv  *grpc.Server
 	httpSrv  *http.Server
 	resolver *tenant.Resolver
 	meter    *tenant.UsageMeter
+
+	cancelRetention context.CancelFunc
 }
 
 // NewServer creates and wires all server components.
 func NewServer(cfg *config.Config, logger *slog.Logger) (*Server, error) {
-	chStore, err := store.NewClickHouseStore(cfg.ClickHouse, logger)
-	if err != nil {
-		return nil, fmt.Errorf("clickhouse: %w", err)
-	}
-
 	pgStore, err := store.NewPostgresStore(cfg.PostgreSQL, logger)
 	if err != nil {
 		return nil, fmt.Errorf("postgresql: %w", err)
@@ -54,7 +50,6 @@ func NewServer(cfg *config.Config, logger *slog.Logger) (*Server, error) {
 	s := &Server{
 		cfg:     cfg,
 		logger:  logger,
-		chStore: chStore,
 		pgStore: pgStore,
 	}
 
@@ -72,10 +67,10 @@ func NewServer(cfg *config.Config, logger *slog.Logger) (*Server, error) {
 	if s.meter != nil {
 		meter = s.meter
 	}
-	handler := ingest.NewHandler(chStore, pgStore, logger, meter)
+	handler := ingest.NewHandler(pgStore, pgStore, logger, meter)
 	s.ingest = handler
 
-	router := api.NewRouter(chStore, pgStore, cfg.Server.APIKey, cfg.Server.AuthMode, s.resolver, cfg.Server.AdminKey)
+	router := api.NewRouter(pgStore, cfg.Server.APIKey, cfg.Server.AuthMode, s.resolver, cfg.Server.AdminKey)
 	grpcSrv := grpc.NewServer(grpcOpts...)
 	collectorpb.RegisterTraceServiceServer(grpcSrv, handler)
 
@@ -96,6 +91,11 @@ func NewServer(cfg *config.Config, logger *slog.Logger) (*Server, error) {
 func (s *Server) Run() error {
 	// Start ingest background flusher
 	s.ingest.Start()
+
+	// Start retention cleanup goroutine
+	retCtx, retCancel := context.WithCancel(context.Background())
+	s.cancelRetention = retCancel
+	s.pgStore.StartRetentionCleanup(retCtx)
 
 	// gRPC listener
 	grpcAddr := fmt.Sprintf(":%d", s.cfg.Server.GRPCPort)
@@ -150,8 +150,12 @@ func (s *Server) Shutdown() error {
 	// 3. Stop ingest flusher (final flush)
 	s.ingest.Stop()
 
-	// 4. Close stores
-	s.chStore.Close()
+	// 4. Stop retention cleanup
+	if s.cancelRetention != nil {
+		s.cancelRetention()
+	}
+
+	// 5. Close store
 	s.pgStore.Close()
 
 	s.logger.Info("shutdown complete")

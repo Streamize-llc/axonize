@@ -30,7 +30,6 @@ func main() {
 	logger.Info("starting axonize server",
 		"grpc_port", cfg.Server.GRPCPort,
 		"http_port", cfg.Server.HTTPPort,
-		"clickhouse", cfg.ClickHouse.Host,
 		"postgresql", cfg.PostgreSQL.Host,
 	)
 

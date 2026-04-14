@@ -2,7 +2,7 @@ package store
 
 import "time"
 
-// SpanRecord maps 1:1 to the ClickHouse spans table.
+// SpanRecord maps 1:1 to the PostgreSQL spans table.
 type SpanRecord struct {
 	TenantID     string
 	TraceID      string
@@ -150,7 +150,7 @@ type GPUDetail struct {
 	LastSeen     time.Time `json:"last_seen"`
 }
 
-// GPUMetricRow is a single GPU metric data point from ClickHouse.
+// GPUMetricRow is a single GPU metric data point.
 type GPUMetricRow struct {
 	Timestamp    time.Time `json:"timestamp"`
 	ResourceUUID string    `json:"resource_uuid"`

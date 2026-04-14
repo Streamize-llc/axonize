@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""E2E test: SDK → gRPC → Server → ClickHouse → REST API.
+"""E2E test: SDK → gRPC → Server → PostgreSQL → REST API.
 
 Prerequisites:
-    docker compose up -d   # ClickHouse + PostgreSQL + axonize-server
+    docker compose up -d   # PostgreSQL + axonize-server
     make migrate           # Apply DB migrations
 
 Usage:
@@ -67,7 +67,7 @@ def test_health() -> None:
 
 
 def test_e2e_pipeline() -> None:
-    print("\n=== E2E Pipeline: SDK → Server → ClickHouse → API ===")
+    print("\n=== E2E Pipeline: SDK → Server → PostgreSQL → API ===")
 
     # 1. Initialize SDK
     service_name = f"e2e-test-{int(time.time())}"

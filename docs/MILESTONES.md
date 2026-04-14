@@ -1,8 +1,9 @@
 # Axonize Milestone Roadmap
 
 > **Version**: 0.1.0
-> **Last Updated**: 2026-02-06
+> **Last Updated**: 2026-04-13
 > **Strategy**: Personal Edition 먼저 → Datacenter Edition 확장 (Bottom-up)
+> **Note**: ClickHouse는 제거되었으며, 모든 데이터는 PostgreSQL 단일 DB에 저장됩니다 (2026-04). 아래 마일스톤 기록에서 ClickHouse 언급은 역사적 기록입니다.
 
 ---
 
@@ -51,7 +52,7 @@ Part 2: Datacenter Edition (M6 ~ M9)
 - [x] `docker compose up`으로 ClickHouse + PostgreSQL이 실행됨
 - [x] DB 스키마 마이그레이션이 자동 실행됨
 - [x] `make dev` / `make test` 명령이 동작함
-- [ ] CI (GitHub Actions)에서 lint/test가 통과함
+- [x] CI (GitHub Actions)에서 lint/test가 통과함
 
 #### 주요 작업 항목
 

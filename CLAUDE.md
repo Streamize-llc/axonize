@@ -12,15 +12,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Axonize is an observability platform for AI inference workloads. It sits between infrastructure monitoring (Grafana/Prometheus) and LLM service tracing (Langfuse/LangSmith), focusing on inference-level GPU metrics and performance tracking.
 
-**Primary languages**: Python (SDK), Go (server). Dashboard lives in a separate repo (`axonize-web`). The goal is a unified platform with multi-vendor GPU support (NVIDIA + Apple Silicon).
+**Primary languages**: Python (SDK), Go (server). Dashboard lives in a separate repo (`axonize-web`). Single PostgreSQL database for all data (spans, metrics, GPU registry). The goal is a unified platform with multi-vendor GPU support (NVIDIA + Apple Silicon).
 
 ## Commands
 
 ### Development
 ```bash
-make dev              # Start ClickHouse + PostgreSQL containers only
+make dev              # Start PostgreSQL container only
 make dev-all          # Start all services (DBs + server)
-make migrate          # Apply DB migrations (requires clickhouse-client + psql)
+make migrate          # Apply DB migrations (requires psql)
 make clean            # Stop containers, remove volumes and build artifacts
 ```
 
@@ -52,7 +52,7 @@ Must use native Python — the uv-installed `python3.13` is a wasm32/emscripten 
 
 ### Data flow
 ```
-SDK (Python) → gRPC (OTLP) → Server (Go) → ClickHouse (spans/metrics) + PostgreSQL (GPU registry)
+SDK (Python) → gRPC (OTLP) → Server (Go) → PostgreSQL (spans, metrics, GPU registry)
                                           → REST API → axonize-web (separate repo)
 ```
 
@@ -75,14 +75,14 @@ GPU metrics are collected in a separate daemon thread by `GPUProfiler` and attac
 
 ### Server structure
 - `internal/server.go` — Orchestrates gRPC + HTTP listeners, wires auth interceptors based on `auth_mode`
-- `internal/ingest/handler.go` — OTLP gRPC handler: parses protobuf spans, extracts GPU attributes (`gpu.N.*`), batches to ClickHouse, upserts GPU registry to PostgreSQL; records usage metrics when multi-tenant
-- `internal/store/` — ClickHouse (time-series spans + gpu_metrics) and PostgreSQL (GPU registry) stores; all queries filter by `tenant_id`
+- `internal/ingest/handler.go` — OTLP gRPC handler: parses protobuf spans, extracts GPU attributes (`gpu.N.*`), batches to PostgreSQL, upserts GPU registry; records usage metrics when multi-tenant
+- `internal/store/` — PostgreSQL store for all data (spans, gpu_metrics, GPU registry, tenants); all queries filter by `tenant_id`
 - `internal/api/` — REST endpoints for traces, GPUs, analytics, admin (tenant/key management)
 - `internal/config/` — YAML config with env var overrides (`AXONIZE_CONFIG` or default `config.yaml`)
 - `internal/tenant/` — Multi-tenant support: context propagation (`tenant.go`), API key → tenant_id resolution with 5-min cache (`resolver.go`), usage metering for hybrid billing (`usage.go`)
 
 ### Server interface pattern
-The Go server uses interface-based dependency injection. API handlers depend on query interfaces (`TraceQuerier`, `GPUQuerier`, `GPUMetricQuerier`, `AnalyticsQuerier`), not concrete stores. Ingest depends on `SpanWriter`, `GPURegistrar`, and `UsageRecorder`. When adding new query methods: define in the appropriate interface in `api/`, implement in `store/`, and the concrete store satisfies the interface implicitly.
+The Go server uses interface-based dependency injection. API handlers depend on query interfaces (`TraceQuerier`, `GPUQuerier`, `GPUMetricQuerier`, `AnalyticsQuerier`), not concrete stores. Ingest depends on `SpanWriter`, `GPURegistrar`, and `UsageRecorder`. All interfaces are implemented by `PostgresStore`. When adding new query methods: define in the appropriate interface in `api/`, implement in `store/postgres.go`.
 
 ### Multi-tenant context flow
 Every request carries a `tenant_id` through Go's `context.Context`:
@@ -98,20 +98,21 @@ When `auth_mode = "static"` (default), tenant_id is always `"default"` — zero 
 - **static** (default): Single API key via `AXONIZE_API_KEY`, all data under `tenant_id = "default"`
 - **multi_tenant**: API key → tenant_id resolution via `api_keys` table (SHA-256 hash lookup, 5-min cache). Admin API protected by `AXONIZE_ADMIN_KEY`
 
-### Databases
-- **ClickHouse**: `spans`, `traces`, `gpu_metrics` tables. All include `tenant_id` column. Partitioned by day, TTL 7-90 days.
-- **PostgreSQL**: 3-layer GPU identity model (all with composite `(tenant_id, ...)` PKs) + multi-tenant tables (`tenants`, `api_keys`, `usage_records`):
+### Database (PostgreSQL only)
+Single PostgreSQL database holds all data:
+- **Spans/Metrics**: `spans` table (30-day retention), `gpu_metrics` table (7-day retention). Retention enforced by server-side cleanup goroutine.
+- **GPU Registry**: 3-layer identity model (all with composite `(tenant_id, ...)` PKs):
   1. `physical_gpus` — Immutable hardware (UUID, model, vendor, node)
   2. `compute_resources` — Logical unit (full GPU or MIG instance)
   3. `resource_contexts` — Runtime labels ("cuda:0", pod/container info)
+- **Multi-tenant**: `tenants`, `api_keys`, `usage_records`
 
 This disambiguates MIG environments where every pod sees "cuda:0".
 
 ### Migrations
-Raw SQL files in `migrations/{clickhouse,postgres}/`, applied alphabetically by `migrate.sh`. To add a new migration: create `NNN_description.sql` with the next sequence number. Use `IF NOT EXISTS` / `IF EXISTS` for idempotency.
+Raw SQL files in `migrations/postgres/`, applied alphabetically by `migrate.sh`. To add a new migration: create `NNN_description.sql` with the next sequence number. Use `IF NOT EXISTS` / `IF EXISTS` for idempotency.
 
 ### Docker services
-- `clickhouse` — ports 8123 (HTTP), 9000 (native)
 - `postgres` — port 5432
 - `axonize-server` — gRPC :4317, HTTP :8080
 
@@ -132,7 +133,7 @@ Environment variables for auth in docker-compose: `AXONIZE_API_KEY`, `AXONIZE_AU
 ## Key Conventions
 
 - `ARCHITECTURE.md` is the single source of truth for schemas and data model decisions
-- DB schema in `migrations/` must match ARCHITECTURE.md §6.2 (ClickHouse) and §6.3 (PostgreSQL)
+- DB schema in `migrations/postgres/` must match ARCHITECTURE.md
 - Conventional commits: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`
 - Python: `from __future__ import annotations` in all files; ruff line-length 100; mypy strict
 - Python SDK pins `mypy>=1.10,<1.19` to avoid `librt` build failures on macOS

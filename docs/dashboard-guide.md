@@ -4,11 +4,16 @@ The Axonize dashboard provides a web UI for exploring traces, monitoring GPU per
 
 ## Accessing the Dashboard
 
-After starting with `docker compose up -d`, open:
+The dashboard lives in a separate repository: [axonize-web](https://github.com/Streamize-llc/axonize-web).
 
+```bash
+git clone https://github.com/Streamize-llc/axonize-web.git
+cd axonize-web
+npm install
+npm run dev
 ```
-http://localhost:3000
-```
+
+Then open `http://localhost:3000`.
 
 ## Pages
 
@@ -64,22 +69,10 @@ Deep dive into a single GPU:
 
 ### API URL
 
-By default, the dashboard proxies API requests through nginx to the Axonize server. To point at a different server:
-
-Set `VITE_API_URL` before building:
+By default, the dashboard proxies API requests to the Axonize server at `localhost:8080`. To point at a different server, set `VITE_API_URL` before building:
 
 ```bash
 VITE_API_URL=http://your-server:8080 npm run build
 ```
 
-### Development Mode
-
-For local development with hot reload:
-
-```bash
-cd dashboard
-npm install
-npm run dev
-```
-
-The dev server runs on port 3000 and proxies `/api` requests to `localhost:8080`.
+See the [axonize-web README](https://github.com/Streamize-llc/axonize-web) for full setup and development instructions.

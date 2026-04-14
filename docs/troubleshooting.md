@@ -176,10 +176,6 @@ axonize.init(endpoint="axonize-server:4317", ...)
 
 2. **Check database connectivity**:
    ```bash
-   # ClickHouse
-   docker compose exec clickhouse clickhouse-client --query "SELECT 1"
-
-   # PostgreSQL
    docker compose exec postgres psql -U axonize -d axonize -c "SELECT 1"
    ```
 
@@ -190,53 +186,20 @@ axonize.init(endpoint="axonize-server:4317", ...)
    make migrate
    ```
 
-### ClickHouse Connection Timeout
-
-**Error**: "ClickHouse connection failed" in server logs
-
-**Solution**:
-- Wait for ClickHouse to fully start (health checks in docker-compose.yml handle this)
-- Check ClickHouse is healthy: `docker compose ps clickhouse`
-- Restart server if it started before ClickHouse: `docker compose restart axonize-server`
-
 ---
 
 ## Dashboard Issues
 
-### Dashboard Not Loading (404 or Blank Page)
-
-**Error**: Browser shows "Cannot GET /" or blank page at `http://localhost:3000`
-
-**Solution**:
-
-1. **Check dashboard container is running**:
-   ```bash
-   docker compose ps dashboard
-   ```
-
-2. **Check dashboard logs**:
-   ```bash
-   docker compose logs dashboard
-   ```
-
-3. **Restart dashboard**:
-   ```bash
-   docker compose restart dashboard
-   ```
-
-4. **Verify port 3000 is not in use**:
-   ```bash
-   lsof -i :3000
-   ```
+The dashboard lives in a separate repository: [axonize-web](https://github.com/Streamize-llc/axonize-web). See its README for setup and troubleshooting.
 
 ### Dashboard Shows "No Traces Found"
 
 **Issue**: Dashboard loads but shows empty state
 
 **Solution**:
-1. **Verify server is receiving traces**: Check server logs for "Received N spans"
+1. **Verify server is receiving traces**: Check server logs for "flushed spans"
    ```bash
-   docker compose logs axonize-server | grep "Received"
+   docker compose logs axonize-server | grep "flushed"
    ```
 
 2. **Check SDK is sending traces**:
@@ -248,13 +211,14 @@ axonize.init(endpoint="axonize-server:4317", ...)
 
 3. **Verify database has data**:
    ```bash
-   docker compose exec clickhouse clickhouse-client --query \
-     "SELECT count() FROM spans"
+   docker compose exec postgres psql -U axonize -d axonize -c \
+     "SELECT count(*) FROM spans"
    ```
 
 4. **Check API is accessible**:
    ```bash
-   curl http://localhost:8080/api/v1/traces
+   curl -H "Authorization: Bearer $AXONIZE_API_KEY" \
+     http://localhost:8080/api/v1/traces
    ```
 
 ---

@@ -136,7 +136,7 @@ func (h *Handler) flush() {
 		h.logger.Debug("flushed spans", "count", len(batch))
 	}
 
-	// Insert GPU metrics into ClickHouse
+	// Insert GPU metrics
 	if err := h.writer.InsertGPUMetrics(ctx, batch); err != nil {
 		h.logger.Error("failed to insert gpu metrics", "error", err)
 	}

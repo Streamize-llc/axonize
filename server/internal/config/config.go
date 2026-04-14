@@ -9,7 +9,6 @@ import (
 
 type Config struct {
 	Server     ServerConfig     `yaml:"server"`
-	ClickHouse ClickHouseConfig `yaml:"clickhouse"`
 	PostgreSQL PostgreSQLConfig `yaml:"postgresql"`
 }
 
@@ -21,20 +20,13 @@ type ServerConfig struct {
 	AdminKey string `yaml:"admin_key"` // static admin key for admin API
 }
 
-type ClickHouseConfig struct {
-	Host     string `yaml:"host"`
-	Port     int    `yaml:"port"`
-	Database string `yaml:"database"`
-	User     string `yaml:"user"`
-	Password string `yaml:"password"`
-}
-
 type PostgreSQLConfig struct {
 	Host     string `yaml:"host"`
 	Port     int    `yaml:"port"`
 	Database string `yaml:"database"`
 	User     string `yaml:"user"`
 	Password string `yaml:"password"`
+	SSLMode  string `yaml:"sslmode"`
 }
 
 func Default() *Config {
@@ -43,12 +35,6 @@ func Default() *Config {
 			GRPCPort: 4317,
 			HTTPPort: 8080,
 			AuthMode: "static",
-		},
-		ClickHouse: ClickHouseConfig{
-			Host:     "localhost",
-			Port:     9000,
-			Database: "axonize",
-			User:     "default",
 		},
 		PostgreSQL: PostgreSQLConfig{
 			Host:     "localhost",
@@ -87,24 +73,6 @@ func (c *Config) ApplyEnv() {
 		}
 	}
 
-	if v := os.Getenv("CLICKHOUSE_HOST"); v != "" {
-		c.ClickHouse.Host = v
-	}
-	if v := os.Getenv("CLICKHOUSE_PORT"); v != "" {
-		if p, err := strconv.Atoi(v); err == nil {
-			c.ClickHouse.Port = p
-		}
-	}
-	if v := os.Getenv("CLICKHOUSE_DATABASE"); v != "" {
-		c.ClickHouse.Database = v
-	}
-	if v := os.Getenv("CLICKHOUSE_USER"); v != "" {
-		c.ClickHouse.User = v
-	}
-	if v := os.Getenv("CLICKHOUSE_PASSWORD"); v != "" {
-		c.ClickHouse.Password = v
-	}
-
 	if v := os.Getenv("POSTGRES_HOST"); v != "" {
 		c.PostgreSQL.Host = v
 	}
@@ -121,6 +89,9 @@ func (c *Config) ApplyEnv() {
 	}
 	if v := os.Getenv("POSTGRES_PASSWORD"); v != "" {
 		c.PostgreSQL.Password = v
+	}
+	if v := os.Getenv("POSTGRES_SSLMODE"); v != "" {
+		c.PostgreSQL.SSLMode = v
 	}
 
 	if v := os.Getenv("AXONIZE_API_KEY"); v != "" {

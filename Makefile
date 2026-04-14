@@ -2,7 +2,7 @@
 
 # Development
 dev:
-	docker compose up -d clickhouse postgres
+	docker compose up -d postgres
 
 dev-all:
 	docker compose up -d

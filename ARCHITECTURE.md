@@ -1,8 +1,9 @@
 # Axonize Architecture Document
 
-> **Version**: 0.2.0
-> **Last Updated**: 2026-02-07
+> **Version**: 0.3.0
+> **Last Updated**: 2026-04-13
 > **Status**: Implementation Phase
+> **Note**: ClickHouse has been removed. All data is stored in PostgreSQL (2026-04). Some diagrams and sections below may still reference ClickHouse as historical context.
 
 ---
 

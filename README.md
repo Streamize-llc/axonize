@@ -17,15 +17,15 @@ Axonize sits between infrastructure monitoring (Grafana/Prometheus) and LLM serv
 ## Architecture
 
 ```
-Python SDK (axonize)          Go Server              Databases
+Python SDK (axonize)          Go Server              Database
 =====================    ==================    ==================
  span() / llm_span()         gRPC Ingest
         |                        |
-   Ring Buffer               Batch Writer ----> ClickHouse
-        |                        |               (spans, gpu_metrics)
- Background Processor        GPU Registry ----> PostgreSQL
-        |                        |               (physical_gpus,
-   OTLP gRPC Export          REST API             compute_resources)
+   Ring Buffer               Batch Writer ----> PostgreSQL
+        |                        |               (spans, gpu_metrics,
+ Background Processor        GPU Registry         physical_gpus,
+        |                        |                compute_resources)
+   OTLP gRPC Export          REST API
                                  |
                              Dashboard (React)
 ```
@@ -38,7 +38,7 @@ Python SDK (axonize)          Go Server              Databases
 git clone https://github.com/Streamize-llc/axonize.git
 cd axonize
 
-# Start ClickHouse + PostgreSQL + Server + Dashboard
+# Start PostgreSQL + Server
 docker compose up -d
 
 # Apply database migrations (waits for databases to be ready)
@@ -240,20 +240,18 @@ All server configuration is via environment variables. See [`.env.example`](.env
 | `AXONIZE_API_KEY` | (generated) | Static API key for single-tenant mode |
 | `AXONIZE_AUTH_MODE` | `static` | `static` (single tenant) or `multi_tenant` |
 | `AXONIZE_ADMIN_KEY` | (none) | Admin API key (multi-tenant mode only) |
-| `CLICKHOUSE_HOST` | `clickhouse` | ClickHouse host |
 | `POSTGRES_HOST` | `postgres` | PostgreSQL host |
 | `GRPC_PORT` | `4317` | gRPC ingest port |
 | `HTTP_PORT` | `8080` | HTTP API port |
 
-**Data retention** (ClickHouse TTL):
+**Data retention** (server-side cleanup):
 - Spans: 30 days
-- Traces: 90 days
 - GPU metrics: 7 days
 
 ## Development
 
 ```bash
-# Start dev databases (ClickHouse + PostgreSQL only)
+# Start dev database (PostgreSQL only)
 make dev
 
 # Run SDK tests
@@ -289,12 +287,11 @@ axonize/
 ├── server/                    Go ingest + query server
 │   ├── internal/ingest/       OTLP gRPC handler
 │   ├── internal/api/          REST API endpoints
-│   ├── internal/store/        ClickHouse + PostgreSQL stores
+│   ├── internal/store/        PostgreSQL store
 │   └── internal/tenant/       Multi-tenant auth + usage tracking
 ├── dashboard/                 React + Vite dashboard
 ├── migrations/                Database schemas
-│   ├── clickhouse/            Spans, traces, gpu_metrics tables
-│   └── postgres/              GPU registry + tenant management
+│   └── postgres/              All tables (spans, gpu_metrics, GPU registry, tenants)
 ├── examples/                  Integration examples
 ├── tests/                     E2E + load tests
 ├── docs/                      Documentation

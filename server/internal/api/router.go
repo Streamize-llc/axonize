@@ -7,21 +7,17 @@ import (
 	"github.com/axonize/server/internal/tenant"
 )
 
-// Store combines all query interfaces needed by the API (ClickHouse).
+// Store combines all query interfaces needed by the API (PostgreSQL).
 type Store interface {
 	Pinger
 	TraceQuerier
 	GPUMetricQuerier
 	AnalyticsQuerier
-}
-
-// GPUStore combines GPU registry query interfaces (PostgreSQL).
-type GPUStore interface {
 	GPUQuerier
 }
 
 // NewRouter creates the HTTP router with all API endpoints.
-func NewRouter(s Store, gpuStore GPUStore, apiKey, authMode string, resolver *tenant.Resolver, adminKey string) http.Handler {
+func NewRouter(s Store, apiKey, authMode string, resolver *tenant.Resolver, adminKey string) http.Handler {
 	mux := http.NewServeMux()
 
 	// Health
@@ -33,8 +29,8 @@ func NewRouter(s Store, gpuStore GPUStore, apiKey, authMode string, resolver *te
 	mux.HandleFunc("GET /api/v1/traces/{trace_id}", handleGetTrace(s))
 
 	// GPUs
-	mux.HandleFunc("GET /api/v1/gpus", handleListGPUs(gpuStore))
-	mux.HandleFunc("GET /api/v1/gpus/{uuid}", handleGetGPU(gpuStore))
+	mux.HandleFunc("GET /api/v1/gpus", handleListGPUs(s))
+	mux.HandleFunc("GET /api/v1/gpus/{uuid}", handleGetGPU(s))
 	mux.HandleFunc("GET /api/v1/gpus/{uuid}/metrics", handleGetGPUMetrics(s))
 
 	// Analytics

@@ -813,7 +813,7 @@
                     <div class="flow-node">
                         <div class="flow-box" data-step="db">
                             <div class="flow-box-icon">💾</div>
-                            <div class="flow-box-label">ClickHouse</div>
+                            <div class="flow-box-label">PostgreSQL</div>
                         </div>
                         <span class="tag tag-blue">Storage</span>
                     </div>
@@ -1298,7 +1298,7 @@ GROUP BY gpu_model</textarea>
                         <div class="query-flow-step" id="qf-db">
                             <span style="font-size: 20px;">💾</span>
                             <div>
-                                <strong>ClickHouse</strong>
+                                <strong>PostgreSQL</strong>
                                 <div style="font-size: 12px; color: var(--text-secondary);">Execute query</div>
                             </div>
                         </div>
@@ -1357,11 +1357,11 @@ GROUP BY gpu_model</textarea>
             },
             server: {
                 title: 'Axonize Server',
-                desc: 'OTLP 프로토콜로 Span을 수신합니다. 검증 후 ClickHouse에 저장합니다.',
+                desc: 'OTLP 프로토콜로 Span을 수신합니다. 검증 후 PostgreSQL에 저장합니다.',
                 metrics: ['gRPC 수신', 'Validation', 'Batch insert']
             },
             db: {
-                title: 'ClickHouse',
+                title: 'PostgreSQL',
                 desc: '시계열 데이터베이스에 Span이 저장됩니다. 대시보드에서 조회할 수 있습니다.',
                 metrics: ['Columnar storage', 'Partitioned by date', 'TTL: 30 days']
             }
@@ -1584,7 +1584,7 @@ GROUP BY gpu_model</textarea>
                     { status: 'success', title: '추론 실행', desc: 'GPU 0에서 3.2초 소요' },
                     { status: 'success', title: 'Span 완료', desc: 'status: OK, buffer에 저장' },
                     { status: 'success', title: '서버 전송', desc: 'gRPC 전송 성공' },
-                    { status: 'success', title: 'DB 저장', desc: 'ClickHouse INSERT 완료' }
+                    { status: 'success', title: 'DB 저장', desc: 'PostgreSQL INSERT 완료' }
                 ]
             },
             error: {

@@ -2,20 +2,13 @@
 
 > MVP 목표: 로컬 개발 환경 + Docker Compose 배포
 
+> **Note**: ClickHouse는 제거되었으며, 모든 데이터는 PostgreSQL 단일 DB에 저장됩니다 (2026-04).
+
 ---
 
 ## 1. 데이터베이스 스키마
 
-### 1.1 ClickHouse
-- [x] spans 테이블 생성 스크립트
-- [x] traces 테이블 생성 스크립트
-- [x] gpu_metrics 테이블 생성 스크립트
-- [x] 인덱스 설정
-- [x] TTL 설정 (spans: 30일, traces: 90일, gpu_metrics: 7일)
-- [x] 마이그레이션 스크립트 관리 방안
-- [x] `tenant_id` 컬럼 추가 마이그레이션 (003_add_tenant_id.sql)
-
-### 1.2 PostgreSQL
+### 1.1 PostgreSQL (전체 데이터)
 - [x] physical_gpus 테이블 생성 스크립트
 - [x] compute_resources 테이블 생성 스크립트
 - [x] resource_contexts 테이블 생성 스크립트
@@ -35,7 +28,6 @@
 
 ### 2.2 Docker Compose (개발용)
 - [x] docker-compose.yml 작성
-  - [x] ClickHouse 서비스
   - [x] PostgreSQL 서비스
   - [ ] Redis 서비스 (선택)
   - [x] Server 서비스
@@ -58,7 +50,7 @@
   - [x] `make test` - 테스트 실행
   - [x] `make build` - 이미지 빌드
   - [x] `make clean` - 정리
-- [x] 로컬 ClickHouse/PostgreSQL 실행 스크립트
+- [x] 로컬 PostgreSQL 실행 스크립트
 - [ ] 샘플 데이터 시드 스크립트
 
 ---
@@ -69,9 +61,6 @@
   ```yaml
   server:
     port: 4317
-  clickhouse:
-    host: localhost
-    port: 9000
   postgresql:
     host: localhost
     port: 5432
@@ -91,8 +80,8 @@
 
 ## 6. CI/CD (선택)
 
-- [ ] GitHub Actions 워크플로우
-  - [ ] 테스트 실행
+- [x] GitHub Actions 워크플로우
+  - [x] 테스트 실행
   - [ ] 이미지 빌드
   - [ ] 이미지 푸시 (ghcr.io 또는 Docker Hub)
 - [ ] 버전 태깅 전략
